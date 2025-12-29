@@ -36,8 +36,11 @@ namespace VirtualDesktop.FaceTracking
         private EventWaitHandle _faceStateEvent;
         private bool? _isTracking = null;
         private readonly Stopwatch _stopwatch = new Stopwatch();
+        private readonly Stopwatch _signalStopwatch = new Stopwatch();
         private long _updateCount = 0;
         private double _totalUpdateTicks = 0;
+        private double _totalSignalTicks = 0;
+        private long _signalCount = 0;
         #endregion
 
         #region Properties
@@ -111,6 +114,13 @@ namespace VirtualDesktop.FaceTracking
             {
                 if (_faceStateEvent.WaitOne(50))
                 {
+                    if (_signalStopwatch.IsRunning)
+                    {
+                        _totalSignalTicks += _signalStopwatch.ElapsedTicks;
+                        _signalCount++;
+                    }
+                    _signalStopwatch.Restart();
+
                     _stopwatch.Restart();
                     UpdateTracking();
                     _stopwatch.Stop();
@@ -120,7 +130,9 @@ namespace VirtualDesktop.FaceTracking
 
                     if (_updateCount >= 1000)
                     {
-                        var avgMs = (_totalUpdateTicks / _updateCount) / (double)TimeSpan.TicksPerMillisecond;
+                        var avgUpdateMs = (_totalUpdateTicks / _updateCount) / (double)TimeSpan.TicksPerMillisecond;
+                        var avgSignalMs = (_totalSignalTicks / _signalCount) / (double)TimeSpan.TicksPerMillisecond;
+                        var hz = 1000.0 / avgSignalMs;
                         
                         var tongueOut = _faceState->ExpressionWeights[(int)Expressions.TongueOut];
                         var tongueUp = _faceState->ExpressionWeights[(int)Expressions.TongueTipAlveolar];
@@ -129,11 +141,13 @@ namespace VirtualDesktop.FaceTracking
                         var eyeL = _faceState->ExpressionWeights[(int)Expressions.EyesClosedL];
                         var eyeR = _faceState->ExpressionWeights[(int)Expressions.EyesClosedR];
 
-                        Logger.LogDebug("[VirtualDesktop] Performance: {Avg:F4}ms | TongueOut: {TOut:F2} | TongueUp: {TUp:F2} | JawOpen: {Jaw:F2} | MouthClosed: {Mouth:F2} | EyeL: {EL:F2} | EyeR: {ER:F2}", 
-                            avgMs, tongueOut, tongueUp, jawOpen, mouthClosed, eyeL, eyeR);
+                        Logger.LogDebug("[VirtualDesktop] Performance: {Avg:F4}ms | Signal: {Sig:F2}ms ({Hz:F1}Hz) | TongueOut: {TOut:F2} | TongueUp: {TUp:F2} | JawOpen: {Jaw:F2} | MouthClosed: {Mouth:F2} | EyeL: {EL:F2} | EyeR: {ER:F2}", 
+                            avgUpdateMs, avgSignalMs, hz, tongueOut, tongueUp, jawOpen, mouthClosed, eyeL, eyeR);
                         
                         _updateCount = 0;
                         _totalUpdateTicks = 0;
+                        _totalSignalTicks = 0;
+                        _signalCount = 0;
                     }
                 }
                 else

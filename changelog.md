@@ -1,5 +1,11 @@
 # Changelog
 
+## [v2025.12.29.7] - 2025-12-29
+### Added
+- Tracking refresh rate (Hz) and signal interval monitoring.
+### Changed
+- Periodic debug log now includes the average signal interval and frequency (Hz) of incoming tracking data.
+
 ## [v2025.12.29.6] - 2025-12-29
 ### Added
 - Comprehensive logging for initialization, including thresholds and MemoryMappedFile details.
