@@ -1,5 +1,14 @@
 # Changelog
 
+## [v2025.12.29.4] - 2025-12-29
+### Added
+- Link between tongue vertical movement and eyebrows.
+- Automatic jaw opening when the tongue is extended.
+### Changed
+- `JawOpen` is now forced to be at least as high as `TongueOut` to prevent lip clipping.
+- Eyebrows will now raise slightly when the tongue curls up.
+- Tongue will now curl up slightly when eyebrows are raised.
+
 ## [v2025.12.29.3] - 2025-12-29
 ### Added
 - Deadzones for eye openness and mouth closure.

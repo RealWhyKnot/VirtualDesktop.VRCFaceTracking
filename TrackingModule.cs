@@ -216,16 +216,24 @@ namespace VirtualDesktop.FaceTracking
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void UpdateEyeExpressions(UnifiedExpressionShape[] unifiedExpressions, float* expressions)
         {
+            var tongueUp = expressions[(int)Expressions.TongueTipAlveolar];
+
             unifiedExpressions[(int)UnifiedExpressions.EyeWideLeft].Weight = expressions[(int)Expressions.UpperLidRaiserL];
             unifiedExpressions[(int)UnifiedExpressions.EyeWideRight].Weight = expressions[(int)Expressions.UpperLidRaiserR];
 
             unifiedExpressions[(int)UnifiedExpressions.EyeSquintLeft].Weight = expressions[(int)Expressions.LidTightenerL];
             unifiedExpressions[(int)UnifiedExpressions.EyeSquintRight].Weight = expressions[(int)Expressions.LidTightenerR];
 
-            unifiedExpressions[(int)UnifiedExpressions.BrowInnerUpLeft].Weight = expressions[(int)Expressions.InnerBrowRaiserL];
-            unifiedExpressions[(int)UnifiedExpressions.BrowInnerUpRight].Weight = expressions[(int)Expressions.InnerBrowRaiserR];
-            unifiedExpressions[(int)UnifiedExpressions.BrowOuterUpLeft].Weight = expressions[(int)Expressions.OuterBrowRaiserL];
-            unifiedExpressions[(int)UnifiedExpressions.BrowOuterUpRight].Weight = expressions[(int)Expressions.OuterBrowRaiserR];
+            var browInnerUpL = expressions[(int)Expressions.InnerBrowRaiserL];
+            var browInnerUpR = expressions[(int)Expressions.InnerBrowRaiserR];
+            var browOuterUpL = expressions[(int)Expressions.OuterBrowRaiserL];
+            var browOuterUpR = expressions[(int)Expressions.OuterBrowRaiserR];
+
+            // Link tongue up to eyebrows
+            unifiedExpressions[(int)UnifiedExpressions.BrowInnerUpLeft].Weight = Math.Clamp(browInnerUpL + tongueUp, 0.0f, 1.0f);
+            unifiedExpressions[(int)UnifiedExpressions.BrowInnerUpRight].Weight = Math.Clamp(browInnerUpR + tongueUp, 0.0f, 1.0f);
+            unifiedExpressions[(int)UnifiedExpressions.BrowOuterUpLeft].Weight = Math.Clamp(browOuterUpL + tongueUp, 0.0f, 1.0f);
+            unifiedExpressions[(int)UnifiedExpressions.BrowOuterUpRight].Weight = Math.Clamp(browOuterUpR + tongueUp, 0.0f, 1.0f);
 
             var browLowerL = expressions[(int)Expressions.BrowLowererL];
             unifiedExpressions[(int)UnifiedExpressions.BrowPinchLeft].Weight = browLowerL;
@@ -239,7 +247,11 @@ namespace VirtualDesktop.FaceTracking
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void UpdateMouthExpressions(UnifiedExpressionShape[] unifiedExpressions, float* expressions)
         {
-            unifiedExpressions[(int)UnifiedExpressions.JawOpen].Weight = expressions[(int)Expressions.JawDrop];
+            var tongueOut = expressions[(int)Expressions.TongueOut];
+            var jawOpen = expressions[(int)Expressions.JawDrop];
+
+            // Ensure mouth is open when tongue is out
+            unifiedExpressions[(int)UnifiedExpressions.JawOpen].Weight = Math.Max(jawOpen, tongueOut);
             unifiedExpressions[(int)UnifiedExpressions.JawLeft].Weight = expressions[(int)Expressions.JawSidewaysLeft];
             unifiedExpressions[(int)UnifiedExpressions.JawRight].Weight = expressions[(int)Expressions.JawSidewaysRight];
             unifiedExpressions[(int)UnifiedExpressions.JawForward].Weight = expressions[(int)Expressions.JawThrust];
@@ -324,8 +336,13 @@ namespace VirtualDesktop.FaceTracking
             unifiedExpressions[(int)UnifiedExpressions.NoseSneerLeft].Weight = noseWrinklerL;
             unifiedExpressions[(int)UnifiedExpressions.NoseSneerRight].Weight = noseWrinklerR;
 
-            unifiedExpressions[(int)UnifiedExpressions.TongueOut].Weight = expressions[(int)Expressions.TongueOut];
-            unifiedExpressions[(int)UnifiedExpressions.TongueCurlUp].Weight = expressions[(int)Expressions.TongueTipAlveolar];
+            // Tongue Expression Set   
+            var tongueUp = expressions[(int)Expressions.TongueTipAlveolar];
+            var browUpAvg = (expressions[(int)Expressions.InnerBrowRaiserL] + expressions[(int)Expressions.InnerBrowRaiserR] + 
+                             expressions[(int)Expressions.OuterBrowRaiserL] + expressions[(int)Expressions.OuterBrowRaiserR]) / 4.0f;
+            
+            unifiedExpressions[(int)UnifiedExpressions.TongueOut].Weight = tongueOut;
+            unifiedExpressions[(int)UnifiedExpressions.TongueCurlUp].Weight = Math.Clamp(tongueUp + browUpAvg, 0.0f, 1.0f);
         }
         #endregion
     }
