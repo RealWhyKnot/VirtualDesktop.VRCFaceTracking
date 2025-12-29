@@ -75,9 +75,14 @@ namespace VirtualDesktop.FaceTracking
                 ModuleInformation.StaticImages = new List<Stream> { stream };
             }
 
+            Logger.LogInformation("[VirtualDesktop] Initializing module... (Eye: {Eye}, Expr: {Expr})", eyeAvailable, expressionAvailable);
+            Logger.LogInformation("[VirtualDesktop] Thresholds: EyeOpen: {EThreshold}, MouthClosed: {MThreshold}", EyeOpenThreshold, MouthClosedThreshold);
+
             try
             {
                 var size = Marshal.SizeOf<FaceState>();
+                Logger.LogInformation("[VirtualDesktop] Opening MemoryMappedFile: {MapName} (Size: {Size})", BodyStateMapName, size);
+                
                 _mappedFile = MemoryMappedFile.OpenExisting(BodyStateMapName, MemoryMappedFileRights.ReadWrite);
                 _mappedView = _mappedFile.CreateViewAccessor(0, size);
 
@@ -87,15 +92,15 @@ namespace VirtualDesktop.FaceTracking
 
                 _faceStateEvent = EventWaitHandle.OpenExisting(BodyStateEventName);
             }
-            catch
+            catch (Exception ex)
             {
-                Logger.LogError("[VirtualDesktop] Failed to open MemoryMappedFile. Make sure the Virtual Desktop Streamer (v1.30 or later) is running.");
+                Logger.LogError("[VirtualDesktop] Failed to open MemoryMappedFile or Event: {Message}. Make sure the Virtual Desktop Streamer (v1.30 or later) is running.", ex.Message);
                 return (false, false);
             }
 
             (_eyeAvailable, _expressionAvailable) = (eyeAvailable, expressionAvailable);
             
-            Logger.LogInformation("[VirtualDesktop] Initialized successfully. Eye: {Eye}, Expression: {Expr}", _eyeAvailable, _expressionAvailable);
+            Logger.LogInformation("[VirtualDesktop] Initialized successfully.");
             
             return (_eyeAvailable, _expressionAvailable);
         }
@@ -116,7 +121,17 @@ namespace VirtualDesktop.FaceTracking
                     if (_updateCount >= 1000)
                     {
                         var avgMs = (_totalUpdateTicks / _updateCount) / (double)TimeSpan.TicksPerMillisecond;
-                        Logger.LogDebug("[VirtualDesktop] Avg update time: {Avg:F4}ms", avgMs);
+                        
+                        var tongueOut = _faceState->ExpressionWeights[(int)Expressions.TongueOut];
+                        var tongueUp = _faceState->ExpressionWeights[(int)Expressions.TongueTipAlveolar];
+                        var jawOpen = _faceState->ExpressionWeights[(int)Expressions.JawDrop];
+                        var mouthClosed = _faceState->ExpressionWeights[(int)Expressions.LipsToward];
+                        var eyeL = _faceState->ExpressionWeights[(int)Expressions.EyesClosedL];
+                        var eyeR = _faceState->ExpressionWeights[(int)Expressions.EyesClosedR];
+
+                        Logger.LogDebug("[VirtualDesktop] Performance: {Avg:F4}ms | TongueOut: {TOut:F2} | TongueUp: {TUp:F2} | JawOpen: {Jaw:F2} | MouthClosed: {Mouth:F2} | EyeL: {EL:F2} | EyeR: {ER:F2}", 
+                            avgMs, tongueOut, tongueUp, jawOpen, mouthClosed, eyeL, eyeR);
+                        
                         _updateCount = 0;
                         _totalUpdateTicks = 0;
                     }
@@ -135,6 +150,7 @@ namespace VirtualDesktop.FaceTracking
 
         public override void Teardown()
         {
+            Logger.LogInformation("[VirtualDesktop] Tearing down module...");
             if (_faceState != null)
             {
                 _faceState = null;
@@ -155,6 +171,7 @@ namespace VirtualDesktop.FaceTracking
                 _faceStateEvent = null;
             }
             _isTracking = null;
+            Logger.LogInformation("[VirtualDesktop] Teardown complete.");
         }
         #endregion
 

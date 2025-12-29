@@ -1,5 +1,18 @@
 # Changelog
 
+## [v2025.12.29.6] - 2025-12-29
+### Added
+- Comprehensive logging for initialization, including thresholds and MemoryMappedFile details.
+- Expanded periodic debug logs to include eye openness, mouth closure, and jaw state.
+- Explicit teardown logging.
+### Changed
+- Improved error reporting in `Initialize` to include exception messages.
+
+## [v2025.12.29.5] - 2025-12-29
+### Added
+- `build.ps1` script for automatic building and deployment to VRCFT directory.
+- Detailed periodic debug logging including tongue and eyebrow states.
+
 ## [v2025.12.29.4] - 2025-12-29
 ### Added
 - Link between tongue vertical movement and eyebrows.
