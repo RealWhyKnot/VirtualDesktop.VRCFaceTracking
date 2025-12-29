@@ -24,6 +24,8 @@ namespace VirtualDesktop.FaceTracking
         private const string BodyStateMapName = "VirtualDesktop.BodyState";
         private const string BodyStateEventName = "VirtualDesktop.BodyStateEvent";
         private const float SixthRootConst = 1f / 6f;
+        private const float EyeOpenThreshold = 0.95f;
+        private const float MouthClosedThreshold = 0.95f;
         #endregion
 
         #region Fields
@@ -193,12 +195,13 @@ namespace VirtualDesktop.FaceTracking
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void UpdateEyeData(UnifiedEyeData eye, float* expressions, Quaternion orientationL, Quaternion orientationR)
         {
-            eye.Left.Openness = 
-                1.0f - Math.Clamp(expressions[(int)Expressions.EyesClosedL]
+            var leftOpenness = 1.0f - Math.Clamp(expressions[(int)Expressions.EyesClosedL]
                 + expressions[(int)Expressions.CheekRaiserL] * expressions[(int)Expressions.LidTightenerL], 0.0f, 1.0f);
-            eye.Right.Openness =
-                1.0f - Math.Clamp(expressions[(int)Expressions.EyesClosedR]
+            eye.Left.Openness = leftOpenness >= EyeOpenThreshold ? 1.0f : leftOpenness;
+
+            var rightOpenness = 1.0f - Math.Clamp(expressions[(int)Expressions.EyesClosedR]
                 + expressions[(int)Expressions.CheekRaiserR] * expressions[(int)Expressions.LidTightenerR], 0.0f, 1.0f);
+            eye.Right.Openness = rightOpenness >= EyeOpenThreshold ? 1.0f : rightOpenness;
 
             eye.Right.Gaze = orientationR.Cartesian();
             eye.Left.Gaze = orientationL.Cartesian();
@@ -241,7 +244,8 @@ namespace VirtualDesktop.FaceTracking
             unifiedExpressions[(int)UnifiedExpressions.JawRight].Weight = expressions[(int)Expressions.JawSidewaysRight];
             unifiedExpressions[(int)UnifiedExpressions.JawForward].Weight = expressions[(int)Expressions.JawThrust];
 
-            unifiedExpressions[(int)UnifiedExpressions.MouthClosed].Weight = expressions[(int)Expressions.LipsToward];
+            var mouthClosed = expressions[(int)Expressions.LipsToward];
+            unifiedExpressions[(int)UnifiedExpressions.MouthClosed].Weight = mouthClosed >= MouthClosedThreshold ? 1.0f : mouthClosed;
 
             var mouthLeft = expressions[(int)Expressions.MouthLeft];
             unifiedExpressions[(int)UnifiedExpressions.MouthUpperLeft].Weight = mouthLeft;

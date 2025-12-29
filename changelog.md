@@ -1,5 +1,12 @@
 # Changelog
 
+## [v2025.12.29.3] - 2025-12-29
+### Added
+- Deadzones for eye openness and mouth closure.
+### Changed
+- Eyes will now stay 100% open if openness is above 95%.
+- Mouth will now stay 100% closed if closure weight is above 95%.
+
 ## [v2025.12.29.2] - 2025-12-29
 ### Added
 - Benchmarking with `Stopwatch` to track update performance.
