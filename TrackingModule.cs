@@ -226,11 +226,11 @@ namespace VirtualDesktop.FaceTracking
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void UpdateEyeData(UnifiedEyeData eye, float* expressions, Quaternion orientationL, Quaternion orientationR)
         {
-            var leftOpenness = 1.0f - Math.Clamp(expressions[(int)Expressions.EyesClosedL]
+            var leftOpenness = 1.0f - Math.Clamp(expressions[(int)Expressions.EyesClosedL] * 1.5f
                 + expressions[(int)Expressions.CheekRaiserL] * expressions[(int)Expressions.LidTightenerL], 0.0f, 1.0f);
             eye.Left.Openness = leftOpenness >= EyeOpenThreshold ? 1.0f : leftOpenness;
 
-            var rightOpenness = 1.0f - Math.Clamp(expressions[(int)Expressions.EyesClosedR]
+            var rightOpenness = 1.0f - Math.Clamp(expressions[(int)Expressions.EyesClosedR] * 1.5f
                 + expressions[(int)Expressions.CheekRaiserR] * expressions[(int)Expressions.LidTightenerR], 0.0f, 1.0f);
             eye.Right.Openness = rightOpenness >= EyeOpenThreshold ? 1.0f : rightOpenness;
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## [v2025.12.30.0] - 2025-12-30
+### Changed
+- Increased eye closure sensitivity by 1.5x.
+
 ## [v2025.12.29.7] - 2025-12-29
 ### Added
 - Tracking refresh rate (Hz) and signal interval monitoring.
