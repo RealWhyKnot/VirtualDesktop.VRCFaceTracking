@@ -42,6 +42,7 @@ namespace VirtualDesktop.FaceTracking
         private double _totalUpdateTicks = 0;
         private double _totalSignalTicks = 0;
         private long _signalCount = 0;
+        private string _logPath;
         #endregion
 
         #region Properties
@@ -55,11 +56,11 @@ namespace VirtualDesktop.FaceTracking
                     _isTracking = value;
                     if (value == true)
                     {
-                        Logger.LogInformation("[VirtualDesktop] Tracking is now active!");
+                        WriteLog("[VirtualDesktop] Tracking is now active!");
                     }
                     else
                     {
-                        Logger.LogWarning("[VirtualDesktop] Tracking is not active. Make sure you are connected to your computer, a VR game or SteamVR is launched and 'Forward tracking data' is enabled in the Streaming tab.");
+                        WriteLog("[VirtualDesktop] Tracking is not active. Make sure you are connected to your computer, a VR game or SteamVR is launched and 'Forward tracking data' is enabled in the Streaming tab.");
                     }
                 }
             }
@@ -79,13 +80,28 @@ namespace VirtualDesktop.FaceTracking
                 ModuleInformation.StaticImages = new List<Stream> { stream };
             }
 
-            Logger.LogInformation("[VirtualDesktop] Initializing module... (Eye: {Eye}, Expr: {Expr})", eyeAvailable, expressionAvailable);
-            Logger.LogInformation("[VirtualDesktop] Thresholds: EyeOpen: {EThreshold}, MouthClosed: {MThreshold}", EyeOpenThreshold, MouthClosedThreshold);
+            _logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "VRCFaceTracking", "CustomLibs", "VirtualDesktop", "VD_Tracking.log");
+            try
+            {
+                var directory = Path.GetDirectoryName(_logPath);
+                if (!Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+                if (File.Exists(_logPath))
+                {
+                    File.Delete(_logPath);
+                }
+            }
+            catch { /* Best effort */ }
+
+            WriteLog($"[VirtualDesktop] Initializing module... (Eye: {eyeAvailable}, Expr: {expressionAvailable})");
+            WriteLog($"[VirtualDesktop] Thresholds: EyeOpen: {EyeOpenThreshold}, MouthClosed: {MouthClosedThreshold}");
 
             try
             {
                 var size = Marshal.SizeOf<FaceState>();
-                Logger.LogInformation("[VirtualDesktop] Opening MemoryMappedFile: {MapName} (Size: {Size})", BodyStateMapName, size);
+                WriteLog($"[VirtualDesktop] Opening MemoryMappedFile: {BodyStateMapName} (Size: {size})");
                 
                 _mappedFile = MemoryMappedFile.OpenExisting(BodyStateMapName, MemoryMappedFileRights.ReadWrite);
                 _mappedView = _mappedFile.CreateViewAccessor(0, size);
@@ -98,13 +114,13 @@ namespace VirtualDesktop.FaceTracking
             }
             catch (Exception ex)
             {
-                Logger.LogError("[VirtualDesktop] Failed to open MemoryMappedFile or Event: {Message}. Make sure the Virtual Desktop Streamer (v1.30 or later) is running.", ex.Message);
+                WriteLog($"[VirtualDesktop] Failed to open MemoryMappedFile or Event: {ex.Message}. Make sure the Virtual Desktop Streamer (v1.30 or later) is running.");
                 return (false, false);
             }
 
             (_eyeAvailable, _expressionAvailable) = (eyeAvailable, expressionAvailable);
             
-            Logger.LogInformation("[VirtualDesktop] Initialized successfully.");
+            WriteLog("[VirtualDesktop] Initialized successfully.");
             
             return (_eyeAvailable, _expressionAvailable);
         }
@@ -142,8 +158,7 @@ namespace VirtualDesktop.FaceTracking
                         var eyeL = _faceState->ExpressionWeights[(int)Expressions.EyesClosedL];
                         var eyeR = _faceState->ExpressionWeights[(int)Expressions.EyesClosedR];
 
-                        Logger.LogDebug("[VirtualDesktop] Performance: {Avg:F4}ms | Signal: {Sig:F2}ms ({Hz:F1}Hz) | TongueOut: {TOut:F2} | TongueUp: {TUp:F2} | JawOpen: {Jaw:F2} | MouthClosed: {Mouth:F2} | EyeL: {EL:F2} | EyeR: {ER:F2}", 
-                            avgUpdateMs, avgSignalMs, hz, tongueOut, tongueUp, jawOpen, mouthClosed, eyeL, eyeR);
+                        WriteLog($"[VirtualDesktop] Performance: {avgUpdateMs:F4}ms | Signal: {avgSignalMs:F2}ms ({hz:F1}Hz) | TongueOut: {tongueOut:F2} | TongueUp: {tongueUp:F2} | JawOpen: {jawOpen:F2} | MouthClosed: {mouthClosed:F2} | EyeL: {eyeL:F2} | EyeR: {eyeR:F2}");
                         
                         _updateCount = 0;
                         _totalUpdateTicks = 0;
@@ -165,7 +180,7 @@ namespace VirtualDesktop.FaceTracking
 
         public override void Teardown()
         {
-            Logger.LogInformation("[VirtualDesktop] Tearing down module...");
+            WriteLog("[VirtualDesktop] Tearing down module...");
             if (_faceState != null)
             {
                 _faceState = null;
@@ -186,11 +201,20 @@ namespace VirtualDesktop.FaceTracking
                 _faceStateEvent = null;
             }
             _isTracking = null;
-            Logger.LogInformation("[VirtualDesktop] Teardown complete.");
+            WriteLog("[VirtualDesktop] Teardown complete.");
         }
         #endregion
 
         #region Methods
+        private void WriteLog(string message)
+        {
+            try
+            {
+                File.AppendAllText(_logPath, $"[{DateTime.Now:HH:mm:ss.fff}] {message}{Environment.NewLine}");
+            }
+            catch { /* Ignore logging errors */ }
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void UpdateTracking()
         {

@@ -1,5 +1,11 @@
 # Changelog
 
+## [v2026.01.01.3] - 2026-01-01
+### Changed
+- Replaced standard VRCFaceTracking logging with a custom file-based logger.
+- Logs are now saved to `Documents\VRCFaceTracking\CustomLibs\VirtualDesktop\VD_Tracking.log`.
+- Log file is reset on every module initialization to prevent bloat.
+
 ## [v2026.01.01.2] - 2026-01-01
 ### Changed
 - Tongue vertical movement (CurlUp) is now controlled by the average eyebrow height instead of the (untracked) tongue tip parameter.
