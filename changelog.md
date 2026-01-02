@@ -1,5 +1,10 @@
 # Changelog
 
+## [v2026.01.01.0] - 2026-01-01
+### Added
+- Wink detection: Eyes are now forced to be perfectly in sync unless the difference in openness is large enough to be an intentional wink.
+- Gaze synchronization: Both eyes now look at the same averaged point to prevent cross-eyed or wandering eye issues caused by tracking jitter.
+
 ## [v2025.12.30.0] - 2025-12-30
 ### Changed
 - Increased eye closure sensitivity by 1.5x.

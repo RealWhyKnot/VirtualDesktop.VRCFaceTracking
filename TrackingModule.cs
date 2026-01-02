@@ -228,14 +228,25 @@ namespace VirtualDesktop.FaceTracking
         {
             var leftOpenness = 1.0f - Math.Clamp(expressions[(int)Expressions.EyesClosedL] * 1.5f
                 + expressions[(int)Expressions.CheekRaiserL] * expressions[(int)Expressions.LidTightenerL], 0.0f, 1.0f);
-            eye.Left.Openness = leftOpenness >= EyeOpenThreshold ? 1.0f : leftOpenness;
-
             var rightOpenness = 1.0f - Math.Clamp(expressions[(int)Expressions.EyesClosedR] * 1.5f
                 + expressions[(int)Expressions.CheekRaiserR] * expressions[(int)Expressions.LidTightenerR], 0.0f, 1.0f);
+
+            if (Math.Abs(leftOpenness - rightOpenness) < 0.15f)
+            {
+                var avg = (leftOpenness + rightOpenness) * 0.5f;
+                leftOpenness = avg;
+                rightOpenness = avg;
+            }
+
+            eye.Left.Openness = leftOpenness >= EyeOpenThreshold ? 1.0f : leftOpenness;
             eye.Right.Openness = rightOpenness >= EyeOpenThreshold ? 1.0f : rightOpenness;
 
-            eye.Right.Gaze = orientationR.Cartesian();
-            eye.Left.Gaze = orientationL.Cartesian();
+            var leftGaze = orientationL.Cartesian();
+            var rightGaze = orientationR.Cartesian();
+            var combinedGaze = new Vector2((leftGaze.x + rightGaze.x) * 0.5f, (leftGaze.y + rightGaze.y) * 0.5f);
+
+            eye.Right.Gaze = combinedGaze;
+            eye.Left.Gaze = combinedGaze;
 
             eye.Left.PupilDiameter_MM = 5f;
             eye.Right.PupilDiameter_MM = 5f;
