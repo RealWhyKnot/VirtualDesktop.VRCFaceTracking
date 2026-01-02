@@ -3,9 +3,9 @@
 
 $ErrorActionPreference = "Stop"
 
-$vrcftPath = "$env:AppData\VRCFaceTracking\CustomLibs"
+$vrcftPath = "$env:AppData\VRCFaceTracking\CustomLibs\VirtualDesktop"
 if (-not (Test-Path $vrcftPath)) {
-    Write-Host "VRCFT CustomLibs directory not found at $vrcftPath. Creating it..." -ForegroundColor Cyan
+    Write-Host "VRCFT VirtualDesktop directory not found at $vrcftPath. Creating it..." -ForegroundColor Cyan
     New-Item -ItemType Directory -Path $vrcftPath -Force
 }
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## [v2026.01.01.1] - 2026-01-01
+### Added
+- Added a 1.5x multiplier to expression weights (smiling, frowning, etc.) to make them easier to trigger.
+### Changed
+- Updated `build.ps1` to deploy files into a `VirtualDesktop` subfolder within `CustomLibs` for better organization.
+
 ## [v2026.01.01.0] - 2026-01-01
 ### Added
 - Wink detection: Eyes are now forced to be perfectly in sync unless the difference in openness is large enough to be an intentional wink.
