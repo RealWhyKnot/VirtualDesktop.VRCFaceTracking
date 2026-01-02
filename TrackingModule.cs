@@ -273,10 +273,10 @@ namespace VirtualDesktop.FaceTracking
             var browOuterUpR = expressions[(int)Expressions.OuterBrowRaiserR] * ExpressionMultiplier;
 
             // Link tongue up to eyebrows
-            unifiedExpressions[(int)UnifiedExpressions.BrowInnerUpLeft].Weight = Math.Clamp(browInnerUpL + tongueUp, 0.0f, 1.0f);
-            unifiedExpressions[(int)UnifiedExpressions.BrowInnerUpRight].Weight = Math.Clamp(browInnerUpR + tongueUp, 0.0f, 1.0f);
-            unifiedExpressions[(int)UnifiedExpressions.BrowOuterUpLeft].Weight = Math.Clamp(browOuterUpL + tongueUp, 0.0f, 1.0f);
-            unifiedExpressions[(int)UnifiedExpressions.BrowOuterUpRight].Weight = Math.Clamp(browOuterUpR + tongueUp, 0.0f, 1.0f);
+            unifiedExpressions[(int)UnifiedExpressions.BrowInnerUpLeft].Weight = Math.Clamp(browInnerUpL, 0.0f, 1.0f);
+            unifiedExpressions[(int)UnifiedExpressions.BrowInnerUpRight].Weight = Math.Clamp(browInnerUpR, 0.0f, 1.0f);
+            unifiedExpressions[(int)UnifiedExpressions.BrowOuterUpLeft].Weight = Math.Clamp(browOuterUpL, 0.0f, 1.0f);
+            unifiedExpressions[(int)UnifiedExpressions.BrowOuterUpRight].Weight = Math.Clamp(browOuterUpR, 0.0f, 1.0f);
 
             var browLowerL = expressions[(int)Expressions.BrowLowererL] * ExpressionMultiplier;
             unifiedExpressions[(int)UnifiedExpressions.BrowPinchLeft].Weight = browLowerL;
@@ -294,7 +294,7 @@ namespace VirtualDesktop.FaceTracking
             var jawOpen = expressions[(int)Expressions.JawDrop] * ExpressionMultiplier;
 
             // Ensure mouth is open when tongue is out
-            unifiedExpressions[(int)UnifiedExpressions.JawOpen].Weight = Math.Max(jawOpen, tongueOut);
+            unifiedExpressions[(int)UnifiedExpressions.JawOpen].Weight = Math.Max(jawOpen, tongueOut > 0.1f ? 0.75f : tongueOut);
             unifiedExpressions[(int)UnifiedExpressions.JawLeft].Weight = expressions[(int)Expressions.JawSidewaysLeft] * ExpressionMultiplier;
             unifiedExpressions[(int)UnifiedExpressions.JawRight].Weight = expressions[(int)Expressions.JawSidewaysRight] * ExpressionMultiplier;
             unifiedExpressions[(int)UnifiedExpressions.JawForward].Weight = expressions[(int)Expressions.JawThrust] * ExpressionMultiplier;
@@ -385,7 +385,7 @@ namespace VirtualDesktop.FaceTracking
                              expressions[(int)Expressions.OuterBrowRaiserL] + expressions[(int)Expressions.OuterBrowRaiserR]) / 4.0f;
             
             unifiedExpressions[(int)UnifiedExpressions.TongueOut].Weight = tongueOut;
-            unifiedExpressions[(int)UnifiedExpressions.TongueCurlUp].Weight = Math.Clamp(tongueUp + (browUpAvg * ExpressionMultiplier), 0.0f, 1.0f);
+            unifiedExpressions[(int)UnifiedExpressions.TongueCurlUp].Weight = Math.Clamp(browUpAvg * ExpressionMultiplier, 0.0f, 1.0f);
         }
         #endregion
     }

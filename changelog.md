@@ -1,5 +1,11 @@
 # Changelog
 
+## [v2026.01.01.2] - 2026-01-01
+### Changed
+- Tongue vertical movement (CurlUp) is now controlled by the average eyebrow height instead of the (untracked) tongue tip parameter.
+- Jaw now opens to at least 75% when the tongue is extended (> 0.1) to prevent clipping with lips.
+- Removed the previous logic where tongue movement influenced eyebrow height.
+
 ## [v2026.01.01.1] - 2026-01-01
 ### Added
 - Added a 1.5x multiplier to expression weights (smiling, frowning, etc.) to make them easier to trigger.
