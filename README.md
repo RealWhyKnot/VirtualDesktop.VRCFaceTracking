@@ -5,9 +5,14 @@ This is a [VRCFaceTracking](https://github.com/benaclejames/VRCFaceTracking) mod
 ## Features
 
 - **Eye Tracking**: Full gaze tracking and eye openness.
+    - **Enhanced Logic**: Includes wink detection to keep eyes in sync during blinks and gaze synchronization to prevent jitter/cross-eyed looking.
 - **Face Tracking**: Support for a wide range of facial expressions using Unified Expressions.
-- **Tongue Tracking**: Basic tongue movement support.
-- **High Performance**: Uses Memory Mapped Files for low-latency data transfer from the Virtual Desktop Streamer.
+    - **Tuned Sensitivity**: All expression weights are multiplied by 1.5x to make them easier to trigger naturally.
+- **Tongue Tracking**: Smart tongue movement support.
+    - **Hybrid Control**: Vertical tongue movement is controlled by eyebrow height (ideal for Quest Pro).
+    - **Anti-Clipping**: Jaw automatically opens when the tongue is extended.
+- **High Performance**: Uses Memory Mapped Files for low-latency data transfer.
+- **Custom Logging**: Detailed logs are saved to `Documents\VRCFaceTracking\CustomLibs\VirtualDesktop\VD_Tracking.log` for easy troubleshooting.
 
 ## Requirements
 
