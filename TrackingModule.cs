@@ -170,35 +170,46 @@ namespace VirtualDesktop.FaceTracking
             IsTracking = isTracking;
         }
 
-        private void UpdateEyeData(UnifiedEyeData eye, float* expressions, Quaternion orientationL, Quaternion orientationR)
-        {
-            #region Eye Openness parsing
-
-            eye.Left.Openness = 
-                1.0f - (float)Math.Max(0, Math.Min(1, expressions[(int)Expressions.EyesClosedL]
-                + expressions[(int)Expressions.CheekRaiserL] * expressions[(int)Expressions.LidTightenerL]));
-            eye.Right.Openness =
-                1.0f - (float)Math.Max(0, Math.Min(1, expressions[(int)Expressions.EyesClosedR]
-                + expressions[(int)Expressions.CheekRaiserR] * expressions[(int)Expressions.LidTightenerR]));
-
-            #endregion
-
-            #region Eye Data to UnifiedEye
-
-            eye.Right.Gaze = orientationR.Cartesian();
-            eye.Left.Gaze = orientationL.Cartesian();
-
-            // Eye dilation code, automated process maybe?
-            eye.Left.PupilDiameter_MM = 5f;
-            eye.Right.PupilDiameter_MM = 5f;
-
-            // Force the normalization values of Dilation to fit avg. pupil values.
-            eye._minDilation = 0;
-            eye._maxDilation = 10;
-
-            #endregion
-        }
-
+                private void UpdateEyeData(UnifiedEyeData eye, float* expressions, Quaternion orientationL, Quaternion orientationR)
+                {
+                    #region Eye Openness parsing
+        
+                    // Multiplier for eyes closing
+                    float closeL = expressions[(int)Expressions.EyesClosedL] + expressions[(int)Expressions.CheekRaiserL] * expressions[(int)Expressions.LidTightenerL];
+                    float closeR = expressions[(int)Expressions.EyesClosedR] + expressions[(int)Expressions.CheekRaiserR] * expressions[(int)Expressions.LidTightenerR];
+        
+                    float openL = 1.0f - Math.Max(0, Math.Min(1, closeL));
+                    float openR = 1.0f - Math.Max(0, Math.Min(1, closeR));
+        
+                    // Force synchronization to the most closed eye (minimum openness)
+                    float minOpen = Math.Min(openL, openR);
+                    openL = minOpen;
+                    openR = minOpen;
+        
+                    eye.Left.Openness = openL;
+                    eye.Right.Openness = openR;
+        
+                    #endregion
+        
+                    #region Eye Data to UnifiedEye
+        
+                    // Synchronize gaze (Average L/R)
+                    var combinedRotation = Quaternion.Slerp(orientationL, orientationR, 0.5f);
+                    var combinedGaze = combinedRotation.Cartesian();
+        
+                    eye.Right.Gaze = combinedGaze;
+                    eye.Left.Gaze = combinedGaze;
+        
+                    // Eye dilation code, automated process maybe?
+                    eye.Left.PupilDiameter_MM = 5f;
+                    eye.Right.PupilDiameter_MM = 5f;
+        
+                    // Force the normalization values of Dilation to fit avg. pupil values.
+                    eye._minDilation = 0;
+                    eye._maxDilation = 10;
+        
+                    #endregion
+                }
         private void UpdateEyeExpressions(UnifiedExpressionShape[] unifiedExpressions, float* expressions)
         {
             // Eye Expressions Set
