@@ -30,6 +30,7 @@ namespace VirtualDesktop.FaceTracking
         private bool _eyeAvailable, _expressionAvailable;
         private EventWaitHandle _faceStateEvent;
         private bool? _isTracking = null;
+        private float[] _prevMouthWeights;
         #endregion
 
         #region Properties
@@ -86,6 +87,7 @@ namespace VirtualDesktop.FaceTracking
             }
 
             (_eyeAvailable, _expressionAvailable) = (eyeAvailable, expressionAvailable);
+            _prevMouthWeights = new float[256];
             return (_eyeAvailable, _expressionAvailable);
         }
 
@@ -231,84 +233,93 @@ namespace VirtualDesktop.FaceTracking
             unifiedExpressions[(int)UnifiedExpressions.BrowLowererRight].Weight = expressions[(int)Expressions.BrowLowererR];
         }
 
+        private void SetSmooth(UnifiedExpressionShape[] unifiedExpressions, UnifiedExpressions index, float newValue)
+        {
+            int i = (int)index;
+            float prevValue = _prevMouthWeights[i];
+            float smoothedValue = prevValue + (newValue - prevValue) * 0.35f;
+            _prevMouthWeights[i] = smoothedValue;
+            unifiedExpressions[i].Weight = smoothedValue;
+        }
+
         private void UpdateMouthExpressions(UnifiedExpressionShape[] unifiedExpressions, float* expressions)
         {
             // Jaw Expression Set                        
-            unifiedExpressions[(int)UnifiedExpressions.JawOpen].Weight = expressions[(int)Expressions.JawDrop];
-            unifiedExpressions[(int)UnifiedExpressions.JawLeft].Weight = expressions[(int)Expressions.JawSidewaysLeft];
-            unifiedExpressions[(int)UnifiedExpressions.JawRight].Weight = expressions[(int)Expressions.JawSidewaysRight];
-            unifiedExpressions[(int)UnifiedExpressions.JawForward].Weight = expressions[(int)Expressions.JawThrust];
+            SetSmooth(unifiedExpressions, UnifiedExpressions.JawOpen, expressions[(int)Expressions.JawDrop]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.JawLeft, expressions[(int)Expressions.JawSidewaysLeft]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.JawRight, expressions[(int)Expressions.JawSidewaysRight]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.JawForward, expressions[(int)Expressions.JawThrust]);
 
             // Mouth Expression Set   
-            unifiedExpressions[(int)UnifiedExpressions.MouthClosed].Weight = expressions[(int)Expressions.LipsToward];
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthClosed, expressions[(int)Expressions.LipsToward]);
 
-            unifiedExpressions[(int)UnifiedExpressions.MouthUpperLeft].Weight = expressions[(int)Expressions.MouthLeft];
-            unifiedExpressions[(int)UnifiedExpressions.MouthLowerLeft].Weight = expressions[(int)Expressions.MouthLeft];
-            unifiedExpressions[(int)UnifiedExpressions.MouthUpperRight].Weight = expressions[(int)Expressions.MouthRight];
-            unifiedExpressions[(int)UnifiedExpressions.MouthLowerRight].Weight = expressions[(int)Expressions.MouthRight];
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthUpperLeft, expressions[(int)Expressions.MouthLeft]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthLowerLeft, expressions[(int)Expressions.MouthLeft]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthUpperRight, expressions[(int)Expressions.MouthRight]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthLowerRight, expressions[(int)Expressions.MouthRight]);
 
-            unifiedExpressions[(int)UnifiedExpressions.MouthCornerPullLeft].Weight = expressions[(int)Expressions.LipCornerPullerL];
-            unifiedExpressions[(int)UnifiedExpressions.MouthCornerSlantLeft].Weight = expressions[(int)Expressions.LipCornerPullerL]; // Slant (Sharp Corner Raiser) is baked into Corner Puller.
-            unifiedExpressions[(int)UnifiedExpressions.MouthCornerPullRight].Weight = expressions[(int)Expressions.LipCornerPullerR];
-            unifiedExpressions[(int)UnifiedExpressions.MouthCornerSlantRight].Weight = expressions[(int)Expressions.LipCornerPullerR]; // Slant (Sharp Corner Raiser) is baked into Corner Puller.
-            unifiedExpressions[(int)UnifiedExpressions.MouthFrownLeft].Weight = expressions[(int)Expressions.LipCornerDepressorL];
-            unifiedExpressions[(int)UnifiedExpressions.MouthFrownRight].Weight = expressions[(int)Expressions.LipCornerDepressorR];
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthCornerPullLeft, expressions[(int)Expressions.LipCornerPullerL]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthCornerSlantLeft, expressions[(int)Expressions.LipCornerPullerL]); // Slant (Sharp Corner Raiser) is baked into Corner Puller.
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthCornerPullRight, expressions[(int)Expressions.LipCornerPullerR]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthCornerSlantRight, expressions[(int)Expressions.LipCornerPullerR]); // Slant (Sharp Corner Raiser) is baked into Corner Puller.
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthFrownLeft, expressions[(int)Expressions.LipCornerDepressorL]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthFrownRight, expressions[(int)Expressions.LipCornerDepressorR]);
 
-            unifiedExpressions[(int)UnifiedExpressions.MouthLowerDownLeft].Weight = expressions[(int)Expressions.LowerLipDepressorL];
-            unifiedExpressions[(int)UnifiedExpressions.MouthLowerDownRight].Weight = expressions[(int)Expressions.LowerLipDepressorR];
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthLowerDownLeft, expressions[(int)Expressions.LowerLipDepressorL]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthLowerDownRight, expressions[(int)Expressions.LowerLipDepressorR]);
 
-            unifiedExpressions[(int)UnifiedExpressions.MouthUpperUpLeft].Weight = Math.Max(0, expressions[(int)Expressions.UpperLipRaiserL] - expressions[(int)Expressions.NoseWrinklerL]); // Workaround for upper lip up wierd tracking quirk.
-            unifiedExpressions[(int)UnifiedExpressions.MouthUpperDeepenLeft].Weight = Math.Max(0, expressions[(int)Expressions.UpperLipRaiserL] - expressions[(int)Expressions.NoseWrinklerL]); // Workaround for upper lip up wierd tracking quirk.
-            unifiedExpressions[(int)UnifiedExpressions.MouthUpperUpRight].Weight = Math.Max(0, expressions[(int)Expressions.UpperLipRaiserR] - expressions[(int)Expressions.NoseWrinklerR]); // Workaround for upper lip up wierd tracking quirk.
-            unifiedExpressions[(int)UnifiedExpressions.MouthUpperDeepenRight].Weight = Math.Max(0, expressions[(int)Expressions.UpperLipRaiserR] - expressions[(int)Expressions.NoseWrinklerR]); // Workaround for upper lip up wierd tracking quirk.
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthUpperUpLeft, Math.Max(0, expressions[(int)Expressions.UpperLipRaiserL] - expressions[(int)Expressions.NoseWrinklerL])); // Workaround for upper lip up wierd tracking quirk.
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthUpperDeepenLeft, Math.Max(0, expressions[(int)Expressions.UpperLipRaiserL] - expressions[(int)Expressions.NoseWrinklerL])); // Workaround for upper lip up wierd tracking quirk.
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthUpperUpRight, Math.Max(0, expressions[(int)Expressions.UpperLipRaiserR] - expressions[(int)Expressions.NoseWrinklerR])); // Workaround for upper lip up wierd tracking quirk.
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthUpperDeepenRight, Math.Max(0, expressions[(int)Expressions.UpperLipRaiserR] - expressions[(int)Expressions.NoseWrinklerR])); // Workaround for upper lip up wierd tracking quirk.
 
-            unifiedExpressions[(int)UnifiedExpressions.MouthRaiserUpper].Weight = expressions[(int)Expressions.ChinRaiserT];
-            unifiedExpressions[(int)UnifiedExpressions.MouthRaiserLower].Weight = expressions[(int)Expressions.ChinRaiserB];
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthRaiserUpper, expressions[(int)Expressions.ChinRaiserT]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthRaiserLower, expressions[(int)Expressions.ChinRaiserB]);
 
-            unifiedExpressions[(int)UnifiedExpressions.MouthDimpleLeft].Weight = expressions[(int)Expressions.DimplerL];
-            unifiedExpressions[(int)UnifiedExpressions.MouthDimpleRight].Weight = expressions[(int)Expressions.DimplerR];
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthDimpleLeft, expressions[(int)Expressions.DimplerL]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthDimpleRight, expressions[(int)Expressions.DimplerR]);
 
-            unifiedExpressions[(int)UnifiedExpressions.MouthTightenerLeft].Weight = expressions[(int)Expressions.LipTightenerL];
-            unifiedExpressions[(int)UnifiedExpressions.MouthTightenerRight].Weight = expressions[(int)Expressions.LipTightenerR];
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthTightenerLeft, expressions[(int)Expressions.LipTightenerL]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthTightenerRight, expressions[(int)Expressions.LipTightenerR]);
 
-            unifiedExpressions[(int)UnifiedExpressions.MouthPressLeft].Weight = expressions[(int)Expressions.LipPressorL];
-            unifiedExpressions[(int)UnifiedExpressions.MouthPressRight].Weight = expressions[(int)Expressions.LipPressorR];
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthPressLeft, expressions[(int)Expressions.LipPressorL]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthPressRight, expressions[(int)Expressions.LipPressorR]);
 
-            unifiedExpressions[(int)UnifiedExpressions.MouthStretchLeft].Weight = expressions[(int)Expressions.LipStretcherL];
-            unifiedExpressions[(int)UnifiedExpressions.MouthStretchRight].Weight = expressions[(int)Expressions.LipStretcherR];
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthStretchLeft, expressions[(int)Expressions.LipStretcherL]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.MouthStretchRight, expressions[(int)Expressions.LipStretcherR]);
 
             // Lip Expression Set   
-            unifiedExpressions[(int)UnifiedExpressions.LipPuckerUpperRight].Weight = expressions[(int)Expressions.LipPuckerR];
-            unifiedExpressions[(int)UnifiedExpressions.LipPuckerLowerRight].Weight = expressions[(int)Expressions.LipPuckerR];
-            unifiedExpressions[(int)UnifiedExpressions.LipPuckerUpperLeft].Weight = expressions[(int)Expressions.LipPuckerL];
-            unifiedExpressions[(int)UnifiedExpressions.LipPuckerLowerLeft].Weight = expressions[(int)Expressions.LipPuckerL];
+            SetSmooth(unifiedExpressions, UnifiedExpressions.LipPuckerUpperRight, expressions[(int)Expressions.LipPuckerR]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.LipPuckerLowerRight, expressions[(int)Expressions.LipPuckerR]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.LipPuckerUpperLeft, expressions[(int)Expressions.LipPuckerL]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.LipPuckerLowerLeft, expressions[(int)Expressions.LipPuckerL]);
 
-            unifiedExpressions[(int)UnifiedExpressions.LipFunnelUpperLeft].Weight = expressions[(int)Expressions.LipFunnelerLt];
-            unifiedExpressions[(int)UnifiedExpressions.LipFunnelUpperRight].Weight = expressions[(int)Expressions.LipFunnelerRt];
-            unifiedExpressions[(int)UnifiedExpressions.LipFunnelLowerLeft].Weight = expressions[(int)Expressions.LipFunnelerLb];
-            unifiedExpressions[(int)UnifiedExpressions.LipFunnelLowerRight].Weight = expressions[(int)Expressions.LipFunnelerRb];
+            SetSmooth(unifiedExpressions, UnifiedExpressions.LipFunnelUpperLeft, expressions[(int)Expressions.LipFunnelerLt]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.LipFunnelUpperRight, expressions[(int)Expressions.LipFunnelerRt]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.LipFunnelLowerLeft, expressions[(int)Expressions.LipFunnelerLb]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.LipFunnelLowerRight, expressions[(int)Expressions.LipFunnelerRb]);
 
-            unifiedExpressions[(int)UnifiedExpressions.LipSuckUpperLeft].Weight = Math.Min(1f - (float)Math.Pow(expressions[(int)Expressions.UpperLipRaiserL], 1f / 6f), expressions[(int)Expressions.LipSuckLt]);
-            unifiedExpressions[(int)UnifiedExpressions.LipSuckUpperRight].Weight = Math.Min(1f - (float)Math.Pow(expressions[(int)Expressions.UpperLipRaiserR], 1f / 6f), expressions[(int)Expressions.LipSuckRt]);
-            unifiedExpressions[(int)UnifiedExpressions.LipSuckLowerLeft].Weight = expressions[(int)Expressions.LipSuckLb];
-            unifiedExpressions[(int)UnifiedExpressions.LipSuckLowerRight].Weight = expressions[(int)Expressions.LipSuckRb];
+            SetSmooth(unifiedExpressions, UnifiedExpressions.LipSuckUpperLeft, Math.Min(1f - (float)Math.Pow(expressions[(int)Expressions.UpperLipRaiserL], 1f / 6f), expressions[(int)Expressions.LipSuckLt]));
+            SetSmooth(unifiedExpressions, UnifiedExpressions.LipSuckUpperRight, Math.Min(1f - (float)Math.Pow(expressions[(int)Expressions.UpperLipRaiserR], 1f / 6f), expressions[(int)Expressions.LipSuckRt]));
+            SetSmooth(unifiedExpressions, UnifiedExpressions.LipSuckLowerLeft, expressions[(int)Expressions.LipSuckLb]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.LipSuckLowerRight, expressions[(int)Expressions.LipSuckRb]);
 
             // Cheek Expression Set   
-            unifiedExpressions[(int)UnifiedExpressions.CheekPuffLeft].Weight = expressions[(int)Expressions.CheekPuffL];
-            unifiedExpressions[(int)UnifiedExpressions.CheekPuffRight].Weight = expressions[(int)Expressions.CheekPuffR];
-            unifiedExpressions[(int)UnifiedExpressions.CheekSuckLeft].Weight = expressions[(int)Expressions.CheekSuckL];
-            unifiedExpressions[(int)UnifiedExpressions.CheekSuckRight].Weight = expressions[(int)Expressions.CheekSuckR];
-            unifiedExpressions[(int)UnifiedExpressions.CheekSquintLeft].Weight = expressions[(int)Expressions.CheekRaiserL];
-            unifiedExpressions[(int)UnifiedExpressions.CheekSquintRight].Weight = expressions[(int)Expressions.CheekRaiserR];
+            SetSmooth(unifiedExpressions, UnifiedExpressions.CheekPuffLeft, expressions[(int)Expressions.CheekPuffL]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.CheekPuffRight, expressions[(int)Expressions.CheekPuffR]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.CheekSuckLeft, expressions[(int)Expressions.CheekSuckL]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.CheekSuckRight, expressions[(int)Expressions.CheekSuckR]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.CheekSquintLeft, expressions[(int)Expressions.CheekRaiserL]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.CheekSquintRight, expressions[(int)Expressions.CheekRaiserR]);
 
             // Nose Expression Set             
-            unifiedExpressions[(int)UnifiedExpressions.NoseSneerLeft].Weight = expressions[(int)Expressions.NoseWrinklerL];
-            unifiedExpressions[(int)UnifiedExpressions.NoseSneerRight].Weight = expressions[(int)Expressions.NoseWrinklerR];
+            SetSmooth(unifiedExpressions, UnifiedExpressions.NoseSneerLeft, expressions[(int)Expressions.NoseWrinklerL]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.NoseSneerRight, expressions[(int)Expressions.NoseWrinklerR]);
 
             // Tongue Expression Set   
             // Future placeholder
-            unifiedExpressions[(int)UnifiedExpressions.TongueOut].Weight = expressions[(int)Expressions.TongueOut];
-            unifiedExpressions[(int)UnifiedExpressions.TongueCurlUp].Weight = expressions[(int)Expressions.TongueTipAlveolar];
+            SetSmooth(unifiedExpressions, UnifiedExpressions.TongueOut, expressions[(int)Expressions.TongueOut]);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.TongueCurlUp, expressions[(int)Expressions.TongueTipAlveolar]);
         }
         #endregion
     }
