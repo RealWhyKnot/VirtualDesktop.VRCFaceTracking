@@ -1,0 +1,40 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 7.0.x
+          
+      - name: Build
+        run: dotnet build VirtualDesktop.FaceTracking.csproj -c Release
+        
+      - name: Package
+        run: |
+          mkdir staging
+          copy bin\Release\net7.0-windows\VirtualDesktop.FaceTracking.dll staging\
+          copy module.json staging\
+          powershell Compress-Archive -Path staging\* -DestinationPath VirtualDesktop.VRCFaceTracking.zip
+        shell: cmd
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: VirtualDesktop.VRCFaceTracking.zip
+          draft: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
