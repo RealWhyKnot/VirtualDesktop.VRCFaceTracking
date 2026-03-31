@@ -31,6 +31,9 @@ namespace VirtualDesktop.FaceTracking
         private EventWaitHandle _faceStateEvent;
         private bool? _isTracking = null;
         private float[] _prevMouthWeights;
+        private ExpressionCalibrator _calibrator;
+        private int _debugLogCounter;
+        private static readonly string DebugLogPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "VirtualDesktop.FaceTracking.debug.log");
         #endregion
 
         #region Properties
@@ -49,6 +52,7 @@ namespace VirtualDesktop.FaceTracking
                     else
                     {
                         Logger.LogWarning("[VirtualDesktop] Tracking is not active. Make sure you are connected to your computer, a VR game or SteamVR is launched and 'Forward tracking data' is enabled in the Streaming tab.");
+                        _calibrator?.Reset();
                     }
                 }
             }
@@ -88,6 +92,8 @@ namespace VirtualDesktop.FaceTracking
 
             (_eyeAvailable, _expressionAvailable) = (eyeAvailable, expressionAvailable);
             _prevMouthWeights = new float[256];
+            _calibrator = new ExpressionCalibrator();
+            Logger.LogInformation($"[VirtualDesktop] Debug log: {DebugLogPath}");
             return (_eyeAvailable, _expressionAvailable);
         }
 
@@ -133,6 +139,7 @@ namespace VirtualDesktop.FaceTracking
                 _faceStateEvent = null;
             }
             _isTracking = null;
+            _calibrator = null;
         }
         #endregion
 
@@ -147,32 +154,54 @@ namespace VirtualDesktop.FaceTracking
             var faceState = _faceState;
             if (faceState != null)
             {
-                var expressions = faceState->ExpressionWeights;
+                var calibrated = _calibrator.CalibrateAll(faceState->ExpressionWeights);
 
                 if (_eyeAvailable && faceState->LeftEyeIsValid || faceState->RightEyeIsValid)
-                {                    
+                {
                     var leftEyePose = faceState->LeftEyePose;
                     var rightEyePose = faceState->RightEyePose;
-                    UpdateEyeData(UnifiedTracking.Data.Eye, expressions, leftEyePose.Orientation, rightEyePose.Orientation);
+                    UpdateEyeData(UnifiedTracking.Data.Eye, calibrated, leftEyePose.Orientation, rightEyePose.Orientation);
                     isTracking = true;
                 }
 
                 if (_eyeAvailable && faceState->IsEyeFollowingBlendshapesValid)
                 {
-                    UpdateEyeExpressions(UnifiedTracking.Data.Shapes, expressions);
+                    UpdateEyeExpressions(UnifiedTracking.Data.Shapes, calibrated);
                     isTracking = true;
                 }
 
                 if (_expressionAvailable && faceState->FaceIsValid)
                 {
-                    UpdateMouthExpressions(UnifiedTracking.Data.Shapes, expressions);
+                    UpdateMouthExpressions(UnifiedTracking.Data.Shapes, calibrated);
                     isTracking = true;
+                }
+
+                // Debug logging: write mouth/jaw state to temp file once per second (~72 frames).
+                if (isTracking && ++_debugLogCounter % 72 == 0)
+                {
+                    try
+                    {
+                        var raw = faceState->ExpressionWeights;
+                        float rawJaw    = raw[(int)Expressions.JawDrop];
+                        float rawLips   = raw[(int)Expressions.LipsToward];
+                        float calJaw    = calibrated[(int)Expressions.JawDrop];
+                        float calLips   = calibrated[(int)Expressions.LipsToward];
+                        float floorJaw  = _calibrator.GetFloor((int)Expressions.JawDrop);
+                        float floorLips = _calibrator.GetFloor((int)Expressions.LipsToward);
+                        float outJaw    = UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.JawOpen].Weight;
+                        float outMouth  = UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.MouthClosed].Weight;
+                        var line = $"[{DateTime.Now:HH:mm:ss}] " +
+                                   $"JawDrop:  raw={rawJaw:F3} floor={floorJaw:F3} cal={calJaw:F3} => JawOpen={outJaw:F3} | " +
+                                   $"LipsToward: raw={rawLips:F3} floor={floorLips:F3} cal={calLips:F3} => MouthClosed={outMouth:F3}";
+                        File.AppendAllText(DebugLogPath, line + "\n");
+                    }
+                    catch { }
                 }
             }
             IsTracking = isTracking;
         }
 
-                private void UpdateEyeData(UnifiedEyeData eye, float* expressions, Quaternion orientationL, Quaternion orientationR)
+                private void UpdateEyeData(UnifiedEyeData eye, float[] expressions, Quaternion orientationL, Quaternion orientationR)
                 {
                     #region Eye Openness parsing
         
@@ -212,11 +241,13 @@ namespace VirtualDesktop.FaceTracking
         
                     #endregion
                 }
-        private void UpdateEyeExpressions(UnifiedExpressionShape[] unifiedExpressions, float* expressions)
+        private void UpdateEyeExpressions(UnifiedExpressionShape[] unifiedExpressions, float[] expressions)
         {
             // Eye Expressions Set
-            unifiedExpressions[(int)UnifiedExpressions.EyeWideLeft].Weight = expressions[(int)Expressions.UpperLidRaiserL];
-            unifiedExpressions[(int)UnifiedExpressions.EyeWideRight].Weight = expressions[(int)Expressions.UpperLidRaiserR];
+            // Sync wideness to the wider eye, mirroring how openness syncs to the most closed eye.
+            float eyeWide = Math.Max(expressions[(int)Expressions.UpperLidRaiserL], expressions[(int)Expressions.UpperLidRaiserR]);
+            unifiedExpressions[(int)UnifiedExpressions.EyeWideLeft].Weight = eyeWide;
+            unifiedExpressions[(int)UnifiedExpressions.EyeWideRight].Weight = eyeWide;
 
             unifiedExpressions[(int)UnifiedExpressions.EyeSquintLeft].Weight = expressions[(int)Expressions.LidTightenerL];
             unifiedExpressions[(int)UnifiedExpressions.EyeSquintRight].Weight = expressions[(int)Expressions.LidTightenerR];
@@ -242,7 +273,7 @@ namespace VirtualDesktop.FaceTracking
             unifiedExpressions[i].Weight = smoothedValue;
         }
 
-        private void UpdateMouthExpressions(UnifiedExpressionShape[] unifiedExpressions, float* expressions)
+        private void UpdateMouthExpressions(UnifiedExpressionShape[] unifiedExpressions, float[] expressions)
         {
             // Jaw Expression Set                        
             SetSmooth(unifiedExpressions, UnifiedExpressions.JawOpen, expressions[(int)Expressions.JawDrop]);
