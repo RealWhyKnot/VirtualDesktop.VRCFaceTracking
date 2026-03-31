@@ -1,0 +1,31 @@
+#!/bin/sh
+# Appends the current module version to every regular commit message.
+# e.g.  "Fix eye wide sync" becomes "Fix eye wide sync (v2026.03.30.0)"
+
+COMMIT_MSG_FILE="$1"
+COMMIT_SOURCE="$2"
+
+# Skip for merges, squashes, fixups, or amend-with-existing-message.
+case "$COMMIT_SOURCE" in
+    commit|merge|squash|message) exit 0 ;;
+esac
+
+# Locate module.json relative to the repo root (works in worktrees too).
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+MODULE_JSON="$REPO_ROOT/module.json"
+[ -f "$MODULE_JSON" ] || exit 0
+
+VERSION=$(grep -o '"Version": "[^"]*"' "$MODULE_JSON" | grep -o '[0-9][^"]*' | head -1)
+[ -n "$VERSION" ] || exit 0
+
+# Skip if the version tag is already present.
+grep -qF "(v$VERSION)" "$COMMIT_MSG_FILE" && exit 0
+
+# Append "(vX.X.X.X)" to the first line of the commit message.
+FIRST=$(head -1 "$COMMIT_MSG_FILE")
+REST=$(tail -n +2 "$COMMIT_MSG_FILE")
+
+{
+    printf '%s (v%s)\n' "$FIRST" "$VERSION"
+    printf '%s' "$REST"
+} > "$COMMIT_MSG_FILE.tmp" && mv "$COMMIT_MSG_FILE.tmp" "$COMMIT_MSG_FILE"

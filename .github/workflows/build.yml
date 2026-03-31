@@ -13,28 +13,47 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          echo "tag=$TAG"       >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 7.0.x
-          
+
       - name: Build
-        run: dotnet build VirtualDesktop.FaceTracking.csproj -c Release
-        
+        run: >
+          dotnet build VirtualDesktop.FaceTracking.csproj -c Release
+          -p:Version=${{ steps.version.outputs.version }}
+          -p:FileVersion=${{ steps.version.outputs.version }}
+          -p:AssemblyVersion=${{ steps.version.outputs.version }}
+
       - name: Package
+        shell: pwsh
         run: |
-          mkdir staging
-          copy bin\Release\net7.0-windows\VirtualDesktop.FaceTracking.dll staging\
-          copy module.json staging\
-          powershell Compress-Archive -Path staging\* -DestinationPath VirtualDesktop.VRCFaceTracking.zip
-        shell: cmd
+          New-Item -ItemType Directory -Force staging | Out-Null
+          Copy-Item bin\Release\net7.0-windows\VirtualDesktop.FaceTracking.dll staging\
+
+          # Stamp the tag version into the bundled module.json
+          $json = Get-Content module.json | ConvertFrom-Json
+          $json.Version = "${{ steps.version.outputs.version }}"
+          $json | ConvertTo-Json | Set-Content staging\module.json
+
+          Compress-Archive -Path staging\* -DestinationPath VirtualDesktop.VRCFaceTracking.zip -Force
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
+          name: ${{ steps.version.outputs.tag }}
           files: VirtualDesktop.VRCFaceTracking.zip
-          draft: true
+          draft: false
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
