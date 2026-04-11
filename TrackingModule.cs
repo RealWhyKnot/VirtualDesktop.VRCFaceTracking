@@ -156,7 +156,7 @@ namespace VirtualDesktop.FaceTracking
             {
                 var calibrated = _calibrator.CalibrateAll(faceState->ExpressionWeights);
 
-                if (_eyeAvailable && faceState->LeftEyeIsValid || faceState->RightEyeIsValid)
+                if (_eyeAvailable && (faceState->LeftEyeIsValid || faceState->RightEyeIsValid))
                 {
                     var leftEyePose = faceState->LeftEyePose;
                     var rightEyePose = faceState->RightEyePose;
@@ -188,11 +188,13 @@ namespace VirtualDesktop.FaceTracking
                         float calLips   = calibrated[(int)Expressions.LipsToward];
                         float floorJaw  = _calibrator.GetFloor((int)Expressions.JawDrop);
                         float floorLips = _calibrator.GetFloor((int)Expressions.LipsToward);
+                        float ceilJaw   = _calibrator.GetCeiling((int)Expressions.JawDrop);
+                        float ceilLips  = _calibrator.GetCeiling((int)Expressions.LipsToward);
                         float outJaw    = UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.JawOpen].Weight;
                         float outMouth  = UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.MouthClosed].Weight;
                         var line = $"[{DateTime.Now:HH:mm:ss}] " +
-                                   $"JawDrop:  raw={rawJaw:F3} floor={floorJaw:F3} cal={calJaw:F3} => JawOpen={outJaw:F3} | " +
-                                   $"LipsToward: raw={rawLips:F3} floor={floorLips:F3} cal={calLips:F3} => MouthClosed={outMouth:F3}";
+                                   $"JawDrop:  raw={rawJaw:F3} floor={floorJaw:F3} ceil={ceilJaw:F3} cal={calJaw:F3} => JawOpen={outJaw:F3} | " +
+                                   $"LipsToward: raw={rawLips:F3} floor={floorLips:F3} ceil={ceilLips:F3} cal={calLips:F3} => MouthClosed={outMouth:F3}";
                         File.AppendAllText(DebugLogPath, line + "\n");
                     }
                     catch { }
@@ -212,10 +214,13 @@ namespace VirtualDesktop.FaceTracking
                     float openL = 1.0f - Math.Max(0, Math.Min(1, closeL));
                     float openR = 1.0f - Math.Max(0, Math.Min(1, closeR));
         
-                    // Force synchronization to the most closed eye (minimum openness)
+                    // Soft sync: blend each eye toward the more-closed eye at 70% strength.
+                    // Preserves natural asymmetry (winks, slight variation) while preventing
+                    // extreme mismatches. Blends toward min so sync can only close, never open.
+                    const float EyeSyncStrength = 0.7f;
                     float minOpen = Math.Min(openL, openR);
-                    openL = minOpen;
-                    openR = minOpen;
+                    openL = openL + (minOpen - openL) * EyeSyncStrength;
+                    openR = openR + (minOpen - openR) * EyeSyncStrength;
         
                     eye.Left.Openness = openL;
                     eye.Right.Openness = openR;
@@ -264,22 +269,25 @@ namespace VirtualDesktop.FaceTracking
             unifiedExpressions[(int)UnifiedExpressions.BrowLowererRight].Weight = expressions[(int)Expressions.BrowLowererR];
         }
 
-        private void SetSmooth(UnifiedExpressionShape[] unifiedExpressions, UnifiedExpressions index, float newValue)
+        private void SetSmooth(UnifiedExpressionShape[] unifiedExpressions, UnifiedExpressions index, float newValue, float alpha)
         {
             int i = (int)index;
             float prevValue = _prevMouthWeights[i];
-            float smoothedValue = prevValue + (newValue - prevValue) * 0.35f;
+            float smoothedValue = prevValue + (newValue - prevValue) * alpha;
             _prevMouthWeights[i] = smoothedValue;
             unifiedExpressions[i].Weight = smoothedValue;
         }
 
+        private void SetSmooth(UnifiedExpressionShape[] unifiedExpressions, UnifiedExpressions index, float newValue)
+            => SetSmooth(unifiedExpressions, index, newValue, 0.35f);
+
         private void UpdateMouthExpressions(UnifiedExpressionShape[] unifiedExpressions, float[] expressions)
         {
-            // Jaw Expression Set                        
-            SetSmooth(unifiedExpressions, UnifiedExpressions.JawOpen, expressions[(int)Expressions.JawDrop]);
-            SetSmooth(unifiedExpressions, UnifiedExpressions.JawLeft, expressions[(int)Expressions.JawSidewaysLeft]);
-            SetSmooth(unifiedExpressions, UnifiedExpressions.JawRight, expressions[(int)Expressions.JawSidewaysRight]);
-            SetSmooth(unifiedExpressions, UnifiedExpressions.JawForward, expressions[(int)Expressions.JawThrust]);
+            // Jaw Expression Set — snappier (0.5) for large, fast movements
+            SetSmooth(unifiedExpressions, UnifiedExpressions.JawOpen, expressions[(int)Expressions.JawDrop], 0.5f);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.JawLeft, expressions[(int)Expressions.JawSidewaysLeft], 0.5f);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.JawRight, expressions[(int)Expressions.JawSidewaysRight], 0.5f);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.JawForward, expressions[(int)Expressions.JawThrust], 0.5f);
 
             // Mouth Expression Set   
             SetSmooth(unifiedExpressions, UnifiedExpressions.MouthClosed, expressions[(int)Expressions.LipsToward]);
@@ -335,22 +343,21 @@ namespace VirtualDesktop.FaceTracking
             SetSmooth(unifiedExpressions, UnifiedExpressions.LipSuckLowerLeft, expressions[(int)Expressions.LipSuckLb]);
             SetSmooth(unifiedExpressions, UnifiedExpressions.LipSuckLowerRight, expressions[(int)Expressions.LipSuckRb]);
 
-            // Cheek Expression Set   
-            SetSmooth(unifiedExpressions, UnifiedExpressions.CheekPuffLeft, expressions[(int)Expressions.CheekPuffL]);
-            SetSmooth(unifiedExpressions, UnifiedExpressions.CheekPuffRight, expressions[(int)Expressions.CheekPuffR]);
-            SetSmooth(unifiedExpressions, UnifiedExpressions.CheekSuckLeft, expressions[(int)Expressions.CheekSuckL]);
-            SetSmooth(unifiedExpressions, UnifiedExpressions.CheekSuckRight, expressions[(int)Expressions.CheekSuckR]);
-            SetSmooth(unifiedExpressions, UnifiedExpressions.CheekSquintLeft, expressions[(int)Expressions.CheekRaiserL]);
-            SetSmooth(unifiedExpressions, UnifiedExpressions.CheekSquintRight, expressions[(int)Expressions.CheekRaiserR]);
+            // Cheek Expression Set — smoother (0.3) for slow-moving expressions
+            SetSmooth(unifiedExpressions, UnifiedExpressions.CheekPuffLeft, expressions[(int)Expressions.CheekPuffL], 0.3f);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.CheekPuffRight, expressions[(int)Expressions.CheekPuffR], 0.3f);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.CheekSuckLeft, expressions[(int)Expressions.CheekSuckL], 0.3f);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.CheekSuckRight, expressions[(int)Expressions.CheekSuckR], 0.3f);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.CheekSquintLeft, expressions[(int)Expressions.CheekRaiserL], 0.3f);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.CheekSquintRight, expressions[(int)Expressions.CheekRaiserR], 0.3f);
 
-            // Nose Expression Set             
-            SetSmooth(unifiedExpressions, UnifiedExpressions.NoseSneerLeft, expressions[(int)Expressions.NoseWrinklerL]);
-            SetSmooth(unifiedExpressions, UnifiedExpressions.NoseSneerRight, expressions[(int)Expressions.NoseWrinklerR]);
+            // Nose Expression Set — smoother (0.3)
+            SetSmooth(unifiedExpressions, UnifiedExpressions.NoseSneerLeft, expressions[(int)Expressions.NoseWrinklerL], 0.3f);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.NoseSneerRight, expressions[(int)Expressions.NoseWrinklerR], 0.3f);
 
-            // Tongue Expression Set   
-            // Future placeholder
-            SetSmooth(unifiedExpressions, UnifiedExpressions.TongueOut, expressions[(int)Expressions.TongueOut]);
-            SetSmooth(unifiedExpressions, UnifiedExpressions.TongueCurlUp, expressions[(int)Expressions.TongueTipAlveolar]);
+            // Tongue Expression Set — snappiest (0.6) for speech responsiveness
+            SetSmooth(unifiedExpressions, UnifiedExpressions.TongueOut, expressions[(int)Expressions.TongueOut], 0.6f);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.TongueCurlUp, expressions[(int)Expressions.TongueTipAlveolar], 0.6f);
         }
         #endregion
     }
