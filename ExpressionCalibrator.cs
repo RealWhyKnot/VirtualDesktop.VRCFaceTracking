@@ -142,6 +142,10 @@ namespace VirtualDesktop.FaceTracking
 
         public float GetFloor(int index) => _observedFloor[index];
         public float GetCeiling(int index) => _observedCeiling[index];
+        public int GetSampleCount(int index) => _sampleCount[index];
+        public float GetCalibrated(int index) => _calibrated[index];
+        public bool IsPassthrough(int index) => PassthroughExpressions.Contains(index);
+        public bool IsWarmedUp(int index) => _sampleCount[index] >= WarmupSamples;
 
         public void Reset()
         {

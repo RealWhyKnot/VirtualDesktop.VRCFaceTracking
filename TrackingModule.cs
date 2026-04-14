@@ -32,7 +32,8 @@ namespace VirtualDesktop.FaceTracking
         private bool? _isTracking = null;
         private float[] _prevMouthWeights;
         private ExpressionCalibrator _calibrator;
-        private int _debugLogCounter;
+        private TrackingDiagnostics _diagnostics;
+        private float _prevEyeOpenL, _prevEyeOpenR;
         private static readonly string DebugLogPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "VirtualDesktop.FaceTracking.debug.log");
         #endregion
 
@@ -53,6 +54,7 @@ namespace VirtualDesktop.FaceTracking
                     {
                         Logger.LogWarning("[VirtualDesktop] Tracking is not active. Make sure you are connected to your computer, a VR game or SteamVR is launched and 'Forward tracking data' is enabled in the Streaming tab.");
                         _calibrator?.Reset();
+                        _diagnostics?.OnTrackingReset();
                     }
                 }
             }
@@ -93,6 +95,7 @@ namespace VirtualDesktop.FaceTracking
             (_eyeAvailable, _expressionAvailable) = (eyeAvailable, expressionAvailable);
             _prevMouthWeights = new float[256];
             _calibrator = new ExpressionCalibrator();
+            _diagnostics = new TrackingDiagnostics(DebugLogPath);
             Logger.LogInformation($"[VirtualDesktop] Debug log: {DebugLogPath}");
             return (_eyeAvailable, _expressionAvailable);
         }
@@ -139,6 +142,8 @@ namespace VirtualDesktop.FaceTracking
                 _faceStateEvent = null;
             }
             _isTracking = null;
+            _diagnostics?.Dispose();
+            _diagnostics = null;
             _calibrator = null;
         }
         #endregion
@@ -156,11 +161,29 @@ namespace VirtualDesktop.FaceTracking
             {
                 var calibrated = _calibrator.CalibrateAll(faceState->ExpressionWeights);
 
+                // Diagnostics: calibration snapshot, stuck/floor checks
+                _diagnostics?.OnFrameBegin(faceState->ExpressionWeights, _calibrator, calibrated);
+
                 if (_eyeAvailable && (faceState->LeftEyeIsValid || faceState->RightEyeIsValid))
                 {
+                    // Compute pre-sync openness for diagnostics (mirrors UpdateEyeData formula)
+                    float closeL = calibrated[(int)Expressions.EyesClosedL] + calibrated[(int)Expressions.CheekRaiserL] * calibrated[(int)Expressions.LidTightenerL];
+                    float closeR = calibrated[(int)Expressions.EyesClosedR] + calibrated[(int)Expressions.CheekRaiserR] * calibrated[(int)Expressions.LidTightenerR];
+                    float preSyncOpenL = 1.0f - Math.Max(0, Math.Min(1, closeL));
+                    float preSyncOpenR = 1.0f - Math.Max(0, Math.Min(1, closeR));
+
                     var leftEyePose = faceState->LeftEyePose;
                     var rightEyePose = faceState->RightEyePose;
                     UpdateEyeData(UnifiedTracking.Data.Eye, calibrated, leftEyePose.Orientation, rightEyePose.Orientation);
+
+                    // Diagnostics: eye sync, gaze divergence, confidence
+                    _diagnostics?.OnEyeData(
+                        UnifiedTracking.Data.Eye.Left.Openness,
+                        UnifiedTracking.Data.Eye.Right.Openness,
+                        preSyncOpenL, preSyncOpenR,
+                        leftEyePose.Orientation, rightEyePose.Orientation,
+                        faceState->LeftEyeConfidence, faceState->RightEyeConfidence);
+
                     isTracking = true;
                 }
 
@@ -173,32 +196,13 @@ namespace VirtualDesktop.FaceTracking
                 if (_expressionAvailable && faceState->FaceIsValid)
                 {
                     UpdateMouthExpressions(UnifiedTracking.Data.Shapes, calibrated);
+
+                    // Diagnostics: conflict detection, "looking dumb" heuristics
+                    _diagnostics?.OnMouthExpressionsComplete(calibrated);
                     isTracking = true;
                 }
 
-                // Debug logging: write mouth/jaw state to temp file once per second (~72 frames).
-                if (isTracking && ++_debugLogCounter % 72 == 0)
-                {
-                    try
-                    {
-                        var raw = faceState->ExpressionWeights;
-                        float rawJaw    = raw[(int)Expressions.JawDrop];
-                        float rawLips   = raw[(int)Expressions.LipsToward];
-                        float calJaw    = calibrated[(int)Expressions.JawDrop];
-                        float calLips   = calibrated[(int)Expressions.LipsToward];
-                        float floorJaw  = _calibrator.GetFloor((int)Expressions.JawDrop);
-                        float floorLips = _calibrator.GetFloor((int)Expressions.LipsToward);
-                        float ceilJaw   = _calibrator.GetCeiling((int)Expressions.JawDrop);
-                        float ceilLips  = _calibrator.GetCeiling((int)Expressions.LipsToward);
-                        float outJaw    = UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.JawOpen].Weight;
-                        float outMouth  = UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.MouthClosed].Weight;
-                        var line = $"[{DateTime.Now:HH:mm:ss}] " +
-                                   $"JawDrop:  raw={rawJaw:F3} floor={floorJaw:F3} ceil={ceilJaw:F3} cal={calJaw:F3} => JawOpen={outJaw:F3} | " +
-                                   $"LipsToward: raw={rawLips:F3} floor={floorLips:F3} ceil={ceilLips:F3} cal={calLips:F3} => MouthClosed={outMouth:F3}";
-                        File.AppendAllText(DebugLogPath, line + "\n");
-                    }
-                    catch { }
-                }
+                _diagnostics?.Flush();
             }
             IsTracking = isTracking;
         }
@@ -214,14 +218,19 @@ namespace VirtualDesktop.FaceTracking
                     float openL = 1.0f - Math.Max(0, Math.Min(1, closeL));
                     float openR = 1.0f - Math.Max(0, Math.Min(1, closeR));
         
-                    // Soft sync: blend each eye toward the more-closed eye at 70% strength.
-                    // Preserves natural asymmetry (winks, slight variation) while preventing
-                    // extreme mismatches. Blends toward min so sync can only close, never open.
-                    const float EyeSyncStrength = 0.7f;
+                    // Hard sync: both eyes use the same openness (the more-closed eye wins).
                     float minOpen = Math.Min(openL, openR);
-                    openL = openL + (minOpen - openL) * EyeSyncStrength;
-                    openR = openR + (minOpen - openR) * EyeSyncStrength;
+                    openL = minOpen;
+                    openR = minOpen;
         
+                    // Smooth eye openness (alpha=0.5) to reduce single-frame jitter
+                    // while keeping eyelids responsive.
+                    const float EyeSmoothAlpha = 0.5f;
+                    openL = _prevEyeOpenL + (openL - _prevEyeOpenL) * EyeSmoothAlpha;
+                    openR = _prevEyeOpenR + (openR - _prevEyeOpenR) * EyeSmoothAlpha;
+                    _prevEyeOpenL = openL;
+                    _prevEyeOpenR = openR;
+
                     eye.Left.Openness = openL;
                     eye.Right.Openness = openR;
         
@@ -250,7 +259,15 @@ namespace VirtualDesktop.FaceTracking
         {
             // Eye Expressions Set
             // Sync wideness to the wider eye, mirroring how openness syncs to the most closed eye.
-            float eyeWide = Math.Max(expressions[(int)Expressions.UpperLidRaiserL], expressions[(int)Expressions.UpperLidRaiserR]);
+            // Apply a dead zone so normal resting lid position doesn't trigger EyeWide.
+            // UpperLidRaiser often rests at ~0.8-0.95 calibrated just from having eyes open,
+            // so we remap: only values above 0.55 produce any wideness, reaching 1.0 at full raise.
+            const float WideDeadZone = 0.55f;
+            float rawWideL = expressions[(int)Expressions.UpperLidRaiserL];
+            float rawWideR = expressions[(int)Expressions.UpperLidRaiserR];
+            float wideL = Math.Max(0f, (rawWideL - WideDeadZone) / (1f - WideDeadZone));
+            float wideR = Math.Max(0f, (rawWideR - WideDeadZone) / (1f - WideDeadZone));
+            float eyeWide = Math.Max(wideL, wideR);
             unifiedExpressions[(int)UnifiedExpressions.EyeWideLeft].Weight = eyeWide;
             unifiedExpressions[(int)UnifiedExpressions.EyeWideRight].Weight = eyeWide;
 
@@ -355,9 +372,7 @@ namespace VirtualDesktop.FaceTracking
             SetSmooth(unifiedExpressions, UnifiedExpressions.NoseSneerLeft, expressions[(int)Expressions.NoseWrinklerL], 0.3f);
             SetSmooth(unifiedExpressions, UnifiedExpressions.NoseSneerRight, expressions[(int)Expressions.NoseWrinklerR], 0.3f);
 
-            // Tongue Expression Set — snappiest (0.6) for speech responsiveness
-            SetSmooth(unifiedExpressions, UnifiedExpressions.TongueOut, expressions[(int)Expressions.TongueOut], 0.6f);
-            SetSmooth(unifiedExpressions, UnifiedExpressions.TongueCurlUp, expressions[(int)Expressions.TongueTipAlveolar], 0.6f);
+            // Tongue tracking disabled
         }
         #endregion
     }
