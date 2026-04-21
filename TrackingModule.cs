@@ -3,16 +3,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.MemoryMappedFiles;
-using System.Linq.Expressions;
-using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Threading;
 using VRCFaceTracking;
 using VRCFaceTracking.Core.Library;
 using VRCFaceTracking.Core.Params.Data;
 using VRCFaceTracking.Core.Params.Expressions;
-using VRCFaceTracking.Core.Types;
-using Vector2 = VRCFaceTracking.Core.Types.Vector2;
 
 namespace VirtualDesktop.FaceTracking
 {
@@ -52,7 +48,7 @@ namespace VirtualDesktop.FaceTracking
                     }
                     else
                     {
-                        Logger.LogWarning("[VirtualDesktop] Tracking is not active. Make sure you are connected to your computer, a VR game or SteamVR is launched and 'Forward tracking data' is enabled in the Streaming tab.");
+                        Logger.LogWarning("[VirtualDesktop] Tracking is not active. Make sure you are connected to your computer, 'Forward tracking data to PC' is checked in the Streaming tab and that a VR game or SteamVR is launched.");
                         _calibrator?.Reset();
                         _diagnostics?.OnTrackingReset();
                     }
@@ -111,7 +107,7 @@ namespace VirtualDesktop.FaceTracking
                 else
                 {
                     var faceState = _faceState;
-                    IsTracking = faceState != null && (faceState->LeftEyeIsValid || faceState->RightEyeIsValid || faceState->IsEyeFollowingBlendshapesValid || faceState->FaceIsValid);
+                    IsTracking = faceState != null && (faceState->LeftEyeIsValid || faceState->RightEyeIsValid || faceState->IsEyeFollowingBlendshapesValid || (faceState->FaceFlags & 0b0001) != 0);
                 }
             }
             else
@@ -193,9 +189,9 @@ namespace VirtualDesktop.FaceTracking
                     isTracking = true;
                 }
 
-                if (_expressionAvailable && faceState->FaceIsValid)
+                if (_expressionAvailable && (faceState->FaceFlags & 0b0001) != 0)
                 {
-                    UpdateMouthExpressions(UnifiedTracking.Data.Shapes, calibrated);
+                    UpdateMouthExpressions(UnifiedTracking.Data.Shapes, calibrated, faceState->FaceFlags);
 
                     // Diagnostics: conflict detection, "looking dumb" heuristics
                     _diagnostics?.OnMouthExpressionsComplete(calibrated);
@@ -298,7 +294,7 @@ namespace VirtualDesktop.FaceTracking
         private void SetSmooth(UnifiedExpressionShape[] unifiedExpressions, UnifiedExpressions index, float newValue)
             => SetSmooth(unifiedExpressions, index, newValue, 0.35f);
 
-        private void UpdateMouthExpressions(UnifiedExpressionShape[] unifiedExpressions, float[] expressions)
+        private void UpdateMouthExpressions(UnifiedExpressionShape[] unifiedExpressions, float[] expressions, byte faceFlags)
         {
             // Jaw Expression Set — snappier (0.5) for large, fast movements
             SetSmooth(unifiedExpressions, UnifiedExpressions.JawOpen, expressions[(int)Expressions.JawDrop], 0.5f);
@@ -373,12 +369,19 @@ namespace VirtualDesktop.FaceTracking
             SetSmooth(unifiedExpressions, UnifiedExpressions.NoseSneerRight, expressions[(int)Expressions.NoseWrinklerR], 0.3f);
 
             // Tongue Expression Set
-            // Pass through real tongue data if the headset provides it.
-            // Gaze-emulated tongue is intentionally disabled.
-            float rawTongueOut = expressions[(int)Expressions.TongueOut];
-            float rawTongueCurl = expressions[(int)Expressions.TongueTipAlveolar];
-            SetSmooth(unifiedExpressions, UnifiedExpressions.TongueOut, rawTongueOut, 0.6f);
-            SetSmooth(unifiedExpressions, UnifiedExpressions.TongueCurlUp, rawTongueCurl, 0.6f);
+            if ((faceFlags & 0b0010) != 0)
+            {
+                unifiedExpressions[(int)UnifiedExpressions.TongueOut].Weight = expressions[63];
+                unifiedExpressions[(int)UnifiedExpressions.TongueLeft].Weight = expressions[64];
+                unifiedExpressions[(int)UnifiedExpressions.TongueRight].Weight = expressions[65];
+                unifiedExpressions[(int)UnifiedExpressions.TongueUp].Weight = expressions[66];
+                unifiedExpressions[(int)UnifiedExpressions.TongueDown].Weight = expressions[67];
+            }
+            else
+            {
+                unifiedExpressions[(int)UnifiedExpressions.TongueOut].Weight = expressions[(int)Expressions.TongueOut];
+                unifiedExpressions[(int)UnifiedExpressions.TongueCurlUp].Weight = expressions[(int)Expressions.TongueTipAlveolar];
+            }
         }
         #endregion
     }
