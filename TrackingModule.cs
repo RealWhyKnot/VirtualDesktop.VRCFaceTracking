@@ -372,7 +372,13 @@ namespace VirtualDesktop.FaceTracking
             SetSmooth(unifiedExpressions, UnifiedExpressions.NoseSneerLeft, expressions[(int)Expressions.NoseWrinklerL], 0.3f);
             SetSmooth(unifiedExpressions, UnifiedExpressions.NoseSneerRight, expressions[(int)Expressions.NoseWrinklerR], 0.3f);
 
-            // Tongue tracking disabled
+            // Tongue Expression Set
+            // Pass through real tongue data if the headset provides it.
+            // Gaze-emulated tongue is intentionally disabled.
+            float rawTongueOut = expressions[(int)Expressions.TongueOut];
+            float rawTongueCurl = expressions[(int)Expressions.TongueTipAlveolar];
+            SetSmooth(unifiedExpressions, UnifiedExpressions.TongueOut, rawTongueOut, 0.6f);
+            SetSmooth(unifiedExpressions, UnifiedExpressions.TongueCurlUp, rawTongueCurl, 0.6f);
         }
         #endregion
     }
