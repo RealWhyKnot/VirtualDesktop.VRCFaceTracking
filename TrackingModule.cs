@@ -207,12 +207,19 @@ namespace VirtualDesktop.FaceTracking
                 {
                     #region Eye Openness parsing
         
-                    // Multiplier for eyes closing
+                    // Close signal: combines explicit eye-close with cheek-raiser * lid-tightener (squint).
                     float closeL = expressions[(int)Expressions.EyesClosedL] + expressions[(int)Expressions.CheekRaiserL] * expressions[(int)Expressions.LidTightenerL];
                     float closeR = expressions[(int)Expressions.EyesClosedR] + expressions[(int)Expressions.CheekRaiserR] * expressions[(int)Expressions.LidTightenerR];
-        
-                    float openL = 1.0f - Math.Max(0, Math.Min(1, closeL));
-                    float openR = 1.0f - Math.Max(0, Math.Min(1, closeR));
+
+                    // Dead zone on close signal. Partial closures below this threshold are treated
+                    // as "eyes open"; values above it rescale to 0..1 so a full close still reaches 1.0.
+                    // Mirrors WideDeadZone below. Raise if eyes still feel too sensitive; set to 0 to disable.
+                    const float CloseDeadZone = 0.15f;
+                    closeL = Math.Max(0f, (Math.Min(1f, closeL) - CloseDeadZone) / (1f - CloseDeadZone));
+                    closeR = Math.Max(0f, (Math.Min(1f, closeR) - CloseDeadZone) / (1f - CloseDeadZone));
+
+                    float openL = 1.0f - closeL;
+                    float openR = 1.0f - closeR;
         
                     // Hard sync: both eyes use the same openness (the more-closed eye wins).
                     float minOpen = Math.Min(openL, openR);
