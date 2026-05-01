@@ -13,6 +13,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history + tags so Generate-ReleaseNotes.ps1 can resolve the prior tag
 
       - name: Extract version from tag
         id: version
@@ -48,12 +50,29 @@ jobs:
 
           Compress-Archive -Path staging\* -DestinationPath VirtualDesktop.VRCFaceTracking.zip -Force
 
+      - name: Generate auto-changelog
+        id: changelog
+        shell: pwsh
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          # generate_release_notes: true on softprops/action-gh-release only
+          # lists merged PRs; this repo uses direct commits, so we generate
+          # the body from git log instead. See .github/scripts/Generate-ReleaseNotes.ps1.
+          $body = & ./.github/scripts/Generate-ReleaseNotes.ps1
+          if (-not $body) { $body = '_Maintenance release; see commit log for details._' }
+          $delim = "EOF_" + [Guid]::NewGuid().ToString('N')
+          "body<<$delim" >> $env:GITHUB_OUTPUT
+          $body          >> $env:GITHUB_OUTPUT
+          $delim         >> $env:GITHUB_OUTPUT
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ steps.version.outputs.tag }}
           files: VirtualDesktop.VRCFaceTracking.zip
           draft: false
-          generate_release_notes: true
+          body: ${{ steps.changelog.outputs.body }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
