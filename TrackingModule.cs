@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.Runtime.InteropServices;
@@ -30,7 +31,19 @@ namespace VirtualDesktop.FaceTracking
         private ExpressionCalibrator _calibrator;
         private TrackingDiagnostics _diagnostics;
         private float _prevEyeOpenL, _prevEyeOpenR;
+        private OneEuroFilter[] _rawFilters;
+        private float[] _filteredRaw;
+        private readonly Stopwatch _frameClock = new Stopwatch();
+        // Reset 1-euro filter state if the gap between updates exceeds this. Prevents
+        // a long pause from injecting a huge velocity spike into the derivative
+        // estimate the next time tracking resumes.
+        private const float MaxFrameGapSeconds = 0.2f;
         private static readonly string DebugLogPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "VirtualDesktop.FaceTracking.debug.log");
+        private static readonly string CalibrationProfilePath = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "VRCFaceTracking",
+            "VirtualDesktop.FaceTracking",
+            "calibration-v2.json");
         #endregion
 
         #region Properties
@@ -49,8 +62,9 @@ namespace VirtualDesktop.FaceTracking
                     else
                     {
                         Logger.LogWarning("[VirtualDesktop] Tracking is not active. Make sure you are connected to your computer, 'Forward tracking data to PC' is checked in the Streaming tab and that a VR game or SteamVR is launched.");
-                        _calibrator?.Reset();
-                        _diagnostics?.OnTrackingReset();
+                        _diagnostics?.OnTrackingInactive();
+                        ResetRawFilters();
+                        _frameClock.Reset();
                     }
                 }
             }
@@ -90,9 +104,14 @@ namespace VirtualDesktop.FaceTracking
 
             (_eyeAvailable, _expressionAvailable) = (eyeAvailable, expressionAvailable);
             _prevMouthWeights = new float[256];
-            _calibrator = new ExpressionCalibrator();
+            _calibrator = new ExpressionCalibrator(CalibrationProfilePath);
             _diagnostics = new TrackingDiagnostics(DebugLogPath);
+            _filteredRaw = new float[FaceState.ExpressionCount];
+            _rawFilters = new OneEuroFilter[FaceState.ExpressionCount];
+            for (int i = 0; i < _rawFilters.Length; i++)
+                _rawFilters[i] = new OneEuroFilter();
             Logger.LogInformation($"[VirtualDesktop] Debug log: {DebugLogPath}");
+            Logger.LogInformation($"[VirtualDesktop] Calibration profile: {CalibrationProfilePath}");
             return (_eyeAvailable, _expressionAvailable);
         }
 
@@ -138,9 +157,13 @@ namespace VirtualDesktop.FaceTracking
                 _faceStateEvent = null;
             }
             _isTracking = null;
+            _calibrator?.SaveNow();
             _diagnostics?.Dispose();
             _diagnostics = null;
             _calibrator = null;
+            _rawFilters = null;
+            _filteredRaw = null;
+            _frameClock.Reset();
         }
         #endregion
 
@@ -155,7 +178,16 @@ namespace VirtualDesktop.FaceTracking
             var faceState = _faceState;
             if (faceState != null)
             {
-                var calibrated = _calibrator.CalibrateAll(faceState->ExpressionWeights);
+                float dt = TickFrameClock();
+                float[] filteredRaw = FilterRawWeights(faceState->ExpressionWeights, dt);
+
+                float[] calibrated;
+                fixed (float* filteredPtr = filteredRaw)
+                {
+                    calibrated = _calibrator.CalibrateAll(filteredPtr);
+                }
+
+                ArbitrateConflicts(calibrated);
 
                 // Diagnostics: calibration snapshot, stuck/floor checks
                 _diagnostics?.OnFrameBegin(faceState->ExpressionWeights, _calibrator, calibrated);
@@ -287,6 +319,58 @@ namespace VirtualDesktop.FaceTracking
             unifiedExpressions[(int)UnifiedExpressions.BrowLowererLeft].Weight = expressions[(int)Expressions.BrowLowererL];
             unifiedExpressions[(int)UnifiedExpressions.BrowPinchRight].Weight = expressions[(int)Expressions.BrowLowererR];
             unifiedExpressions[(int)UnifiedExpressions.BrowLowererRight].Weight = expressions[(int)Expressions.BrowLowererR];
+        }
+
+        private float TickFrameClock()
+        {
+            if (!_frameClock.IsRunning)
+            {
+                _frameClock.Restart();
+                return 0f;
+            }
+
+            float dt = (float)_frameClock.Elapsed.TotalSeconds;
+            _frameClock.Restart();
+
+            if (dt > MaxFrameGapSeconds)
+            {
+                ResetRawFilters();
+                return 0f;
+            }
+            return dt;
+        }
+
+        private float[] FilterRawWeights(float* rawWeights, float dt)
+        {
+            int count = FaceState.ExpressionCount;
+            for (int i = 0; i < count; i++)
+                _filteredRaw[i] = _rawFilters[i].Filter(rawWeights[i], dt);
+            return _filteredRaw;
+        }
+
+        private void ResetRawFilters()
+        {
+            if (_rawFilters == null)
+                return;
+            for (int i = 0; i < _rawFilters.Length; i++)
+                _rawFilters[i]?.Reset();
+        }
+
+        private static void ArbitrateConflicts(float[] calibrated)
+        {
+            float lambda = ExpressionConflicts.ArbitrationLambda;
+            var pairs = ExpressionConflicts.Arbitration;
+            for (int i = 0; i < pairs.Length; i++)
+            {
+                int a = pairs[i].A;
+                int b = pairs[i].B;
+                float va = calibrated[a];
+                float vb = calibrated[b];
+                float na = va - lambda * vb;
+                float nb = vb - lambda * va;
+                calibrated[a] = na < 0f ? 0f : na;
+                calibrated[b] = nb < 0f ? 0f : nb;
+            }
         }
 
         private void SetSmooth(UnifiedExpressionShape[] unifiedExpressions, UnifiedExpressions index, float newValue, float alpha)

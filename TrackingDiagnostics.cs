@@ -32,19 +32,7 @@ namespace VirtualDesktop.FaceTracking
         #endregion
 
         #region Expression conflict pairs
-        private static readonly (int A, int B, string Desc)[] ConflictPairs =
-        {
-            ((int)Expressions.LipCornerPullerL, (int)Expressions.LipCornerDepressorL, "Smile+Frown L"),
-            ((int)Expressions.LipCornerPullerR, (int)Expressions.LipCornerDepressorR, "Smile+Frown R"),
-            ((int)Expressions.CheekPuffL, (int)Expressions.CheekSuckL, "CheekPuff+CheekSuck L"),
-            ((int)Expressions.CheekPuffR, (int)Expressions.CheekSuckR, "CheekPuff+CheekSuck R"),
-            ((int)Expressions.LipPuckerL, (int)Expressions.LipStretcherL, "Pucker+Stretch L"),
-            ((int)Expressions.LipPuckerR, (int)Expressions.LipStretcherR, "Pucker+Stretch R"),
-            ((int)Expressions.JawDrop, (int)Expressions.ChinRaiserB, "JawDrop+ChinRaiser"),
-            ((int)Expressions.LipSuckLt, (int)Expressions.UpperLipRaiserL, "LipSuck+UpperLipRaiser L"),
-            ((int)Expressions.LipSuckRt, (int)Expressions.UpperLipRaiserR, "LipSuck+UpperLipRaiser R"),
-            ((int)Expressions.TongueOut, (int)Expressions.TongueRetreat, "TongueOut+TongueRetreat"),
-        };
+        private static readonly ConflictPair[] ConflictPairs = ExpressionConflicts.Detection;
 
         // Symmetric mouth expression pairs for asymmetry detection
         private static readonly (int L, int R, string Name)[] SymmetricPairs =
@@ -258,11 +246,11 @@ namespace VirtualDesktop.FaceTracking
         }
 
         /// <summary>
-        /// Called when tracking goes inactive and calibration resets.
+        /// Called when tracking goes inactive. Calibration is retained.
         /// </summary>
-        public void OnTrackingReset()
+        public void OnTrackingInactive()
         {
-            LogImmediate("DIAG", "Tracking reset - calibration cleared");
+            LogImmediate("DIAG", "Tracking inactive - calibration retained");
             Array.Clear(_stuckAtZeroFrames, 0, ExpressionCount);
             Array.Clear(_stuckAtOneFrames, 0, ExpressionCount);
             Array.Clear(_wasStuckZero, 0, ExpressionCount);
@@ -510,7 +498,7 @@ namespace VirtualDesktop.FaceTracking
                 if (calibrated[pair.A] > 0.5f && calibrated[pair.B] > 0.5f)
                 {
                     LogImmediate("ANOM",
-                        $"Conflict: {pair.Desc} ({ExpressionNames[pair.A]}={calibrated[pair.A]:F2} {ExpressionNames[pair.B]}={calibrated[pair.B]:F2})");
+                        $"Conflict: {pair.Description} ({ExpressionNames[pair.A]}={calibrated[pair.A]:F2} {ExpressionNames[pair.B]}={calibrated[pair.B]:F2})");
                     _conflictCooldown[p] = ConflictCooldownFrames;
                 }
             }
