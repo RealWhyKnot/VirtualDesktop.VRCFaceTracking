@@ -83,6 +83,32 @@ if (-not $entries -or $entries.Count -eq 0) {
     return ''
 }
 
+# Resolve each commit's GitHub login via the compare API. The local git author
+# name is often a real name or handle that does not match the GitHub username,
+# which produces broken @-mentions in the rendered release body. We fall back
+# to the git author name if the API call fails or the commit has no linked
+# GitHub account (e.g. unverified email).
+$loginBySha = @{}
+if ($Repo -and $prevTag) {
+    try {
+        $compareJson = & gh api "repos/$Repo/compare/$prevTag...$Tag" 2>$null | ConvertFrom-Json
+        if ($compareJson -and $compareJson.commits) {
+            foreach ($c in $compareJson.commits) {
+                if ($c.sha -and $c.author -and $c.author.login) {
+                    $loginBySha[$c.sha] = $c.author.login
+                }
+            }
+        }
+    } catch {
+        # Leave the map empty; rendering falls back to the git author name.
+    }
+}
+
+function Resolve-Author($entry) {
+    if ($loginBySha.ContainsKey($entry.Sha)) { return $loginBySha[$entry.Sha] }
+    return $entry.Author
+}
+
 function Get-Category([string] $subject) {
     if ($subject -match '^feat(\(.+?\))?!?:')     { return @{ Order = 1; Name = 'Features' } }
     if ($subject -match '^fix(\(.+?\))?!?:')      { return @{ Order = 2; Name = 'Bug Fixes' } }
@@ -119,7 +145,7 @@ if ($useGroups) {
         [void]$sb.AppendLine("### $($g.Name)")
         foreach ($t in $g.Group) {
             $e = $t.Entry
-            [void]$sb.AppendLine("- $($e.Subject) by @$($e.Author) in $($e.Short)")
+            [void]$sb.AppendLine("- $($e.Subject) by @$(Resolve-Author $e) in $($e.Short)")
         }
         [void]$sb.AppendLine()
     }
