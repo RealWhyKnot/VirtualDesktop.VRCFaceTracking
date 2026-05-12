@@ -185,12 +185,14 @@ namespace VirtualDesktop.FaceTracking
                 fixed (float* filteredPtr = filteredRaw)
                 {
                     calibrated = _calibrator.CalibrateAll(filteredPtr);
+                    ArbitrateConflicts(calibrated);
+
+                    // Pass the filtered signal so floor-above-raw checks compare against
+                    // what the calibrator actually learned from. Comparing against the
+                    // unfiltered sensor weights would flag harmless noise-valley dips below
+                    // the floor as unconverged calibration.
+                    _diagnostics?.OnFrameBegin(filteredPtr, _calibrator, calibrated);
                 }
-
-                ArbitrateConflicts(calibrated);
-
-                // Diagnostics: calibration snapshot, stuck/floor checks
-                _diagnostics?.OnFrameBegin(faceState->ExpressionWeights, _calibrator, calibrated);
 
                 if (_eyeAvailable && (faceState->LeftEyeIsValid || faceState->RightEyeIsValid))
                 {
