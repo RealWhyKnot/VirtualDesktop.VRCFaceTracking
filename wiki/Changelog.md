@@ -6,6 +6,10 @@ All notable user-visible changes to VirtualDesktop.VRCFaceTracking. Mirrors the 
 
 _No notable changes since the last release._
 
+## v2026.05.12.1
+
+- Removed the 1-euro filter pre-pass added in v2026.05.12.0. The headset's tracking signal is already smooth, and the extra low-pass step added perceptible latency without solving a real problem. Calibration persistence, soft-max curve, asymmetric floor learning, and antagonist arbitration from v2026.05.12.0 are unchanged.
+
 ## v2026.05.12.0
 
 ### Calibration

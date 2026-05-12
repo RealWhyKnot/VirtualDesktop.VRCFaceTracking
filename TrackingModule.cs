@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.Runtime.InteropServices;
@@ -31,13 +30,6 @@ namespace VirtualDesktop.FaceTracking
         private ExpressionCalibrator _calibrator;
         private TrackingDiagnostics _diagnostics;
         private float _prevEyeOpenL, _prevEyeOpenR;
-        private OneEuroFilter[] _rawFilters;
-        private float[] _filteredRaw;
-        private readonly Stopwatch _frameClock = new Stopwatch();
-        // Reset 1-euro filter state if the gap between updates exceeds this. Prevents
-        // a long pause from injecting a huge velocity spike into the derivative
-        // estimate the next time tracking resumes.
-        private const float MaxFrameGapSeconds = 0.2f;
         private static readonly string DebugLogPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "VirtualDesktop.FaceTracking.debug.log");
         private static readonly string CalibrationProfilePath = System.IO.Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -63,8 +55,6 @@ namespace VirtualDesktop.FaceTracking
                     {
                         Logger.LogWarning("[VirtualDesktop] Tracking is not active. Make sure you are connected to your computer, 'Forward tracking data to PC' is checked in the Streaming tab and that a VR game or SteamVR is launched.");
                         _diagnostics?.OnTrackingInactive();
-                        ResetRawFilters();
-                        _frameClock.Reset();
                     }
                 }
             }
@@ -106,10 +96,6 @@ namespace VirtualDesktop.FaceTracking
             _prevMouthWeights = new float[256];
             _calibrator = new ExpressionCalibrator(CalibrationProfilePath);
             _diagnostics = new TrackingDiagnostics(DebugLogPath);
-            _filteredRaw = new float[FaceState.ExpressionCount];
-            _rawFilters = new OneEuroFilter[FaceState.ExpressionCount];
-            for (int i = 0; i < _rawFilters.Length; i++)
-                _rawFilters[i] = new OneEuroFilter();
             Logger.LogInformation($"[VirtualDesktop] Debug log: {DebugLogPath}");
             Logger.LogInformation($"[VirtualDesktop] Calibration profile: {CalibrationProfilePath}");
             return (_eyeAvailable, _expressionAvailable);
@@ -161,9 +147,6 @@ namespace VirtualDesktop.FaceTracking
             _diagnostics?.Dispose();
             _diagnostics = null;
             _calibrator = null;
-            _rawFilters = null;
-            _filteredRaw = null;
-            _frameClock.Reset();
         }
         #endregion
 
@@ -178,21 +161,11 @@ namespace VirtualDesktop.FaceTracking
             var faceState = _faceState;
             if (faceState != null)
             {
-                float dt = TickFrameClock();
-                float[] filteredRaw = FilterRawWeights(faceState->ExpressionWeights, dt);
+                var calibrated = _calibrator.CalibrateAll(faceState->ExpressionWeights);
+                ArbitrateConflicts(calibrated);
 
-                float[] calibrated;
-                fixed (float* filteredPtr = filteredRaw)
-                {
-                    calibrated = _calibrator.CalibrateAll(filteredPtr);
-                    ArbitrateConflicts(calibrated);
-
-                    // Pass the filtered signal so floor-above-raw checks compare against
-                    // what the calibrator actually learned from. Comparing against the
-                    // unfiltered sensor weights would flag harmless noise-valley dips below
-                    // the floor as unconverged calibration.
-                    _diagnostics?.OnFrameBegin(filteredPtr, _calibrator, calibrated);
-                }
+                // Diagnostics: calibration snapshot, stuck/floor checks
+                _diagnostics?.OnFrameBegin(faceState->ExpressionWeights, _calibrator, calibrated);
 
                 if (_eyeAvailable && (faceState->LeftEyeIsValid || faceState->RightEyeIsValid))
                 {
@@ -321,41 +294,6 @@ namespace VirtualDesktop.FaceTracking
             unifiedExpressions[(int)UnifiedExpressions.BrowLowererLeft].Weight = expressions[(int)Expressions.BrowLowererL];
             unifiedExpressions[(int)UnifiedExpressions.BrowPinchRight].Weight = expressions[(int)Expressions.BrowLowererR];
             unifiedExpressions[(int)UnifiedExpressions.BrowLowererRight].Weight = expressions[(int)Expressions.BrowLowererR];
-        }
-
-        private float TickFrameClock()
-        {
-            if (!_frameClock.IsRunning)
-            {
-                _frameClock.Restart();
-                return 0f;
-            }
-
-            float dt = (float)_frameClock.Elapsed.TotalSeconds;
-            _frameClock.Restart();
-
-            if (dt > MaxFrameGapSeconds)
-            {
-                ResetRawFilters();
-                return 0f;
-            }
-            return dt;
-        }
-
-        private float[] FilterRawWeights(float* rawWeights, float dt)
-        {
-            int count = FaceState.ExpressionCount;
-            for (int i = 0; i < count; i++)
-                _filteredRaw[i] = _rawFilters[i].Filter(rawWeights[i], dt);
-            return _filteredRaw;
-        }
-
-        private void ResetRawFilters()
-        {
-            if (_rawFilters == null)
-                return;
-            for (int i = 0; i < _rawFilters.Length; i++)
-                _rawFilters[i]?.Reset();
         }
 
         private static void ArbitrateConflicts(float[] calibrated)
