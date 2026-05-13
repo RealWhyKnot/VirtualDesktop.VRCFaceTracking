@@ -6,6 +6,12 @@ All notable user-visible changes to VirtualDesktop.VRCFaceTracking are tracked h
 
 _No notable changes since the last release._
 
+## v2026.05.12.2
+
+- Tracking pipeline reverted to upstream v1.4 behavior. The continuous calibration, diagnostic logging, smoothing, dead zones, and conflict arbitration added in v2026.05.12.0 have been removed.
+- Eyelids still hard-sync to the more-closed eye so blinks stay symmetric.
+- The on-disk calibration profile at `%APPDATA%\VRCFaceTracking\VirtualDesktop.FaceTracking\calibration-v2.json` is no longer used and can be deleted.
+
 ## v2026.05.12.1
 
 - Removed the 1-euro filter pre-pass added in v2026.05.12.0. The headset's tracking signal is already smooth, and the extra low-pass step added perceptible latency without solving a real problem. Calibration persistence, soft-max curve, asymmetric floor learning, and antagonist arbitration from v2026.05.12.0 are unchanged.
