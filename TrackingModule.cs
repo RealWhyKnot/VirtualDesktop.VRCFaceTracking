@@ -1,6 +1,7 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.Runtime.InteropServices;
@@ -26,6 +27,7 @@ namespace VirtualDesktop.FaceTracking
         private bool _eyeAvailable, _expressionAvailable;
         private EventWaitHandle _faceStateEvent;
         private bool? _isTracking = null;
+        private long _eyeFollowingLostTicks;
         #endregion
 
         #region Properties
@@ -142,6 +144,7 @@ namespace VirtualDesktop.FaceTracking
             if (faceState != null)
             {
                 var expressions = faceState->ExpressionWeights;
+                TrackEyeFollowing(faceState->IsEyeFollowingBlendshapesValid, (faceState->FaceFlags & 0b0001) != 0);
 
                 if (_eyeAvailable && faceState->LeftEyeIsValid || faceState->RightEyeIsValid)
                 {                    
@@ -151,7 +154,7 @@ namespace VirtualDesktop.FaceTracking
                     isTracking = true;
                 }
 
-                if (_eyeAvailable && faceState->IsEyeFollowingBlendshapesValid)
+                if (_eyeAvailable && ((faceState->FaceFlags & 0b0001) != 0 || faceState->IsEyeFollowingBlendshapesValid))
                 {
                     UpdateEyeExpressions(UnifiedTracking.Data.Eye, UnifiedTracking.Data.Shapes, expressions);
                     isTracking = true;
@@ -164,6 +167,28 @@ namespace VirtualDesktop.FaceTracking
                 }
             }
             IsTracking = isTracking;
+        }
+
+        private void TrackEyeFollowing(bool eyeFollowingValid, bool faceValid)
+        {
+            if (!eyeFollowingValid && faceValid)
+            {
+                if (_eyeFollowingLostTicks == 0)
+                {
+                    _eyeFollowingLostTicks = Stopwatch.GetTimestamp();
+                }
+                return;
+            }
+
+            if (_eyeFollowingLostTicks != 0)
+            {
+                var lostMs = (Stopwatch.GetTimestamp() - _eyeFollowingLostTicks) * 1000.0 / Stopwatch.Frequency;
+                _eyeFollowingLostTicks = 0;
+                if (lostMs >= 100)
+                {
+                    Logger.LogDebug("[VirtualDesktop] Eye-following blendshapes were invalid for {Ms:N0} ms while the face was tracked", lostMs);
+                }
+            }
         }
 
         private void UpdateEyeData(UnifiedEyeData eye, Quaternion orientationL, Quaternion orientationR)
