@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Workflow syntax
+        uses: RealWhyKnot/workflows/workflow-syntax@v1
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build
+        shell: pwsh
+        run: |
+          dotnet build VirtualDesktop.FaceTracking.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { throw "build failed ($LASTEXITCODE)" }
+
+      - name: Upload module
+        uses: actions/upload-artifact@v7
+        with:
+          name: VirtualDesktop.FaceTracking-${{ github.sha }}
+          path: |
+            bin/Release/net7.0-windows/VirtualDesktop.FaceTracking.dll
+            module.json
+          retention-days: 14

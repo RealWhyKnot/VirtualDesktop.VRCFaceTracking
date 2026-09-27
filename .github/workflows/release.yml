@@ -1,0 +1,113 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build (vYYYY.M.D.N or vYYYY.M.D.N-beta)
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release ${{ inputs.tag || github.ref_name }}
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Resolve tag
+        id: tag
+        uses: RealWhyKnot/workflows/resolve-tag@v1
+        with:
+          tag: ${{ inputs.tag || github.ref_name }}
+          tag-pattern: '^v\d{4}\.\d+\.\d+\.\d+(-beta)?$'
+
+      - name: Validate release version sequence
+        uses: RealWhyKnot/workflows/version-sequence@v1
+        with:
+          tag: ${{ steps.tag.outputs.tag }}
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build and package
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          $numeric = ($env:RELEASE_VERSION -split '-')[0]
+          dotnet build VirtualDesktop.FaceTracking.csproj -c Release "-p:Version=$numeric" "-p:FileVersion=$numeric" "-p:AssemblyVersion=$numeric" "-p:InformationalVersion=$env:RELEASE_VERSION"
+          if ($LASTEXITCODE -ne 0) { throw "build failed ($LASTEXITCODE)" }
+          $stage = 'build/stage'
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          Copy-Item bin/Release/net7.0-windows/VirtualDesktop.FaceTracking.dll $stage
+          $module = Get-Content module.json -Raw | ConvertFrom-Json
+          $module.Version = $numeric
+          $module | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $stage 'module.json') -Encoding utf8NoBOM
+          Compress-Archive -Path "$stage/*" -DestinationPath "build/VirtualDesktop.FaceTracking-$env:RELEASE_VERSION.zip" -Force
+
+      - name: Checksums
+        id: checksums
+        uses: RealWhyKnot/workflows/checksums@v1
+        with:
+          archives: build/*.zip
+
+      - name: Resolve the changelog base
+        id: base
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          case "$RELEASE_TAG" in
+            *-*) previous=$(git describe --tags --abbrev=0 --match 'v[0-9]*' "$RELEASE_TAG^" 2>/dev/null || true) ;;
+            *) previous=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-*' "$RELEASE_TAG^" 2>/dev/null || true) ;;
+          esac
+          if [ -z "$previous" ]; then
+            previous=$(tr -d '[:space:]' < .github/release-base)
+          fi
+          echo "Changelog base: $previous"
+          echo "previous=$previous" >> "$GITHUB_OUTPUT"
+
+      - name: Release notes
+        id: notes
+        uses: RealWhyKnot/workflows/release-notes@v1
+        with:
+          tag: ${{ steps.tag.outputs.tag }}
+          previous-tag: ${{ steps.base.outputs.previous }}
+          title: VirtualDesktop.FaceTracking ${{ steps.tag.outputs.tag }}
+          extra: ${{ steps.checksums.outputs.table }}
+
+      - name: Publish
+        uses: RealWhyKnot/workflows/publish-release@v1
+        with:
+          tag: ${{ steps.tag.outputs.tag }}
+          notes-file: ${{ steps.notes.outputs.file }}
+          assets: |
+            build/VirtualDesktop.FaceTracking-${{ steps.tag.outputs.version }}.zip
+            ${{ steps.checksums.outputs.manifests }}
+          prerelease: ${{ steps.tag.outputs.prerelease }}
+          draft-first: true
+          verify-asset: VirtualDesktop.FaceTracking-${{ steps.tag.outputs.version }}.zip
+          verify-sha256: ${{ steps.checksums.outputs.sha256 }}
