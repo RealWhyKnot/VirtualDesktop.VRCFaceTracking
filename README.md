@@ -1,6 +1,8 @@
 # VirtualDesktop.VRCFaceTracking
 VRCFaceTracking module for Virtual Desktop
 
-This is my fork of [guygodin/VirtualDesktop.VRCFaceTracking](https://github.com/guygodin/VirtualDesktop.VRCFaceTracking). It keeps the eyelids moving when the headset loses gaze tracking. Upstream only reads eye openness while the eye-following blendshapes are valid, so a blink that lost the pupils left the lids frozen until gaze came back. Openness now comes from the face model whenever the face is tracked, and a debug log line records each gaze dropout.
+This is my fork of [guygodin/VirtualDesktop.VRCFaceTracking](https://github.com/guygodin/VirtualDesktop.VRCFaceTracking). It keeps the eyelids moving when the headset loses gaze tracking.
 
-Builds are published on the Releases page. MIT licensed, same as upstream.
+Upstream reads eye openness only while the eye-following blendshapes are valid. When a blink lost the pupils, the lids froze until gaze came back. In this fork openness comes from the face model whenever the face is tracked, and each gaze dropout writes a debug log line.
+
+Builds are on the Releases page. MIT licensed, like upstream.
