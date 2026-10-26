@@ -27,7 +27,10 @@ jobs:
   release:
     name: Release ${{ inputs.tag || github.ref_name }}
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      actions: read
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -41,6 +44,12 @@ jobs:
         with:
           tag: ${{ inputs.tag || github.ref_name }}
           tag-pattern: '^v\d{4}\.\d+\.\d+\.\d+(-beta)?$'
+
+      - name: Wait for CI
+        uses: RealWhyKnot/workflows/wait-for-ci@v1
+        with:
+          sha: ${{ steps.tag.outputs.sha }}
+          workflow: ci.yml
 
       - name: Validate release version sequence
         uses: RealWhyKnot/workflows/version-sequence@v1
