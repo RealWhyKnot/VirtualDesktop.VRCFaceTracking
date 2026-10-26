@@ -146,7 +146,7 @@ namespace VirtualDesktop.FaceTracking
                 var expressions = faceState->ExpressionWeights;
                 TrackEyeFollowing(faceState->IsEyeFollowingBlendshapesValid, (faceState->FaceFlags & 0b0001) != 0);
 
-                if (_eyeAvailable && faceState->LeftEyeIsValid || faceState->RightEyeIsValid)
+                if (_eyeAvailable && (faceState->LeftEyeIsValid || faceState->RightEyeIsValid))
                 {                    
                     var leftEyePose = faceState->LeftEyePose;
                     var rightEyePose = faceState->RightEyePose;
