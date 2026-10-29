@@ -22,6 +22,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="VirtualDesktop.FaceTracking.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Remove="VirtualDesktop.FaceTracking.csproj.vspscc" />
   </ItemGroup>
 
