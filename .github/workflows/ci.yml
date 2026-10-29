@@ -39,6 +39,12 @@ jobs:
           dotnet build VirtualDesktop.FaceTracking.csproj -c Release
           if ($LASTEXITCODE -ne 0) { throw "build failed ($LASTEXITCODE)" }
 
+      - name: Test
+        shell: pwsh
+        run: |
+          dotnet test Tests/VirtualDesktop.FaceTracking.Tests.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { throw "tests failed ($LASTEXITCODE)" }
+
       - name: Upload module
         uses: actions/upload-artifact@v7
         with:

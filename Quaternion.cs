@@ -31,16 +31,14 @@ namespace VirtualDesktop.FaceTracking
         #region Methods
         public Vector2 Cartesian()
         {
-            float magnitude = (float)Math.Sqrt(X*X + Y*Y + Z*Z + W*W);
-            float Xm = X / magnitude;
-            float Ym = Y / magnitude;
-            float Zm = Z / magnitude;
-            float Wm = W / magnitude;
+            float forwardX = -2 * (X*Z + W*Y);
+            float forwardY = -2 * (Y*Z - W*X);
+            float forwardZ = -(W*W - X*X - Y*Y + Z*Z);
 
-            float pitch = (float)Math.Asin(2 * (Xm*Zm - Wm*Ym));
-            float yaw = (float)Math.Atan2(2 * (Ym*Zm + Wm*Xm), Wm*Wm - Xm*Xm - Ym*Ym + Zm*Zm);
+            float yaw = forwardX / -forwardZ;
+            float pitch = forwardY / (float)Math.Sqrt(forwardX*forwardX + forwardZ*forwardZ);
 
-            return new Vector2(pitch, yaw);
+            return new Vector2(yaw, pitch);
         }
         #endregion
     }
