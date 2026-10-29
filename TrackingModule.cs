@@ -20,18 +20,6 @@ namespace VirtualDesktop.FaceTracking
         private const string BodyStateEventName = "VirtualDesktop.BodyStateEvent";
         #endregion
 
-        #region Static Fields
-        private static readonly UnifiedExpressions[] EyeShapes =
-        {
-            UnifiedExpressions.EyeWideLeft, UnifiedExpressions.EyeWideRight,
-            UnifiedExpressions.EyeSquintLeft, UnifiedExpressions.EyeSquintRight,
-            UnifiedExpressions.BrowInnerUpLeft, UnifiedExpressions.BrowInnerUpRight,
-            UnifiedExpressions.BrowOuterUpLeft, UnifiedExpressions.BrowOuterUpRight,
-            UnifiedExpressions.BrowPinchLeft, UnifiedExpressions.BrowPinchRight,
-            UnifiedExpressions.BrowLowererLeft, UnifiedExpressions.BrowLowererRight
-        };
-        #endregion
-
         #region Fields
         private MemoryMappedFile _mappedFile;
         private MemoryMappedViewAccessor _mappedView;
@@ -40,9 +28,6 @@ namespace VirtualDesktop.FaceTracking
         private EventWaitHandle _faceStateEvent;
         private bool? _isTracking = null;
         private long _eyeFollowingLostTicks;
-        private readonly NeutralFade _gazeFade = new NeutralFade();
-        private readonly NeutralFade _eyeFade = new NeutralFade();
-        private readonly NeutralFade _mouthFade = new NeutralFade();
         #endregion
 
         #region Properties
@@ -115,7 +100,6 @@ namespace VirtualDesktop.FaceTracking
                     var faceState = _faceState;
                     IsTracking = faceState != null && (faceState->LeftEyeIsValid || faceState->RightEyeIsValid || faceState->IsEyeFollowingBlendshapesValid || (faceState->FaceFlags & 0b0001) != 0);
                 }
-                FadeStaleData(Stopwatch.GetTimestamp());
             }
             else
             {
@@ -155,7 +139,6 @@ namespace VirtualDesktop.FaceTracking
         private void UpdateTracking()
         {
             var isTracking = false;
-            var timestamp = Stopwatch.GetTimestamp();
 
             var faceState = _faceState;
             if (faceState != null)
@@ -164,63 +147,26 @@ namespace VirtualDesktop.FaceTracking
                 TrackEyeFollowing(faceState->IsEyeFollowingBlendshapesValid, (faceState->FaceFlags & 0b0001) != 0);
 
                 if (_eyeAvailable && (faceState->LeftEyeIsValid || faceState->RightEyeIsValid))
-                {
+                {                    
                     var leftEyePose = faceState->LeftEyePose;
                     var rightEyePose = faceState->RightEyePose;
                     UpdateEyeData(UnifiedTracking.Data.Eye, leftEyePose.Orientation, rightEyePose.Orientation);
-                    _gazeFade.Refresh(timestamp);
                     isTracking = true;
                 }
 
                 if (_eyeAvailable && ((faceState->FaceFlags & 0b0001) != 0 || faceState->IsEyeFollowingBlendshapesValid))
                 {
                     UpdateEyeExpressions(UnifiedTracking.Data.Eye, UnifiedTracking.Data.Shapes, expressions);
-                    _eyeFade.Refresh(timestamp);
                     isTracking = true;
                 }
 
                 if (_expressionAvailable && (faceState->FaceFlags & 0b0001) != 0)
                 {
                     UpdateMouthExpressions(UnifiedTracking.Data.Shapes, expressions, faceState->FaceFlags);
-                    _mouthFade.Refresh(timestamp);
                     isTracking = true;
                 }
             }
             IsTracking = isTracking;
-        }
-
-        private void FadeStaleData(long timestamp)
-        {
-            var gaze = _eyeAvailable ? _gazeFade.Step(timestamp) : 1f;
-            var eyes = _eyeAvailable ? _eyeFade.Step(timestamp) : 1f;
-            var mouth = _expressionAvailable ? _mouthFade.Step(timestamp) : 1f;
-            ApplyFade(UnifiedTracking.Data, gaze, eyes, mouth);
-        }
-
-        internal static void ApplyFade(UnifiedTrackingData data, float gaze, float eyes, float mouth)
-        {
-            if (gaze < 1f)
-            {
-                data.Eye.Left.Gaze = data.Eye.Left.Gaze * gaze;
-                data.Eye.Right.Gaze = data.Eye.Right.Gaze * gaze;
-            }
-
-            if (eyes < 1f)
-            {
-                data.Eye.Left.Openness = 1f - (1f - data.Eye.Left.Openness) * eyes;
-                data.Eye.Right.Openness = 1f - (1f - data.Eye.Right.Openness) * eyes;
-            }
-
-            if (eyes >= 1f && mouth >= 1f)
-            {
-                return;
-            }
-
-            var shapes = data.Shapes;
-            for (int i = 0; i < shapes.Length; i++)
-            {
-                shapes[i].Weight *= Array.IndexOf(EyeShapes, (UnifiedExpressions)i) >= 0 ? eyes : mouth;
-            }
         }
 
         private void TrackEyeFollowing(bool eyeFollowingValid, bool faceValid)
