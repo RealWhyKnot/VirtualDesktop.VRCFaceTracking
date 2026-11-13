@@ -82,6 +82,15 @@ jobs:
         uses: RealWhyKnot/workflows/checksums@v1
         with:
           archives: build/*.zip
+          sidecar: "true"
+
+      - name: Manifest checksums
+        id: manifest-checksums
+        uses: RealWhyKnot/workflows/checksums@v1
+        with:
+          archives: ${{ steps.checksums.outputs.manifests }}
+          manifest: "false"
+          sidecar: "true"
 
       - name: Resolve the changelog base
         id: base
@@ -116,6 +125,8 @@ jobs:
           assets: |
             build/VirtualDesktop.FaceTracking-${{ steps.tag.outputs.version }}.zip
             ${{ steps.checksums.outputs.manifests }}
+            ${{ steps.checksums.outputs.sidecars }}
+            ${{ steps.manifest-checksums.outputs.sidecars }}
           prerelease: ${{ steps.tag.outputs.prerelease }}
           draft-first: true
           verify-asset: VirtualDesktop.FaceTracking-${{ steps.tag.outputs.version }}.zip
